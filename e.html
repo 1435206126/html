@@ -93,9 +93,26 @@
         .h-se { bottom: -6px; right: -6px; cursor: se-resize; }
 
         /* 进度条 */
-        .progress-area { display: flex; align-items: center; gap: 10px; font-size: 12px; font-family: monospace; }
-        .progress-bar { flex: 1; height: 8px; background: #ddd; border-radius: 4px; cursor: pointer; position: relative; }
+        .progress-area { 
+            display: flex; align-items: center; gap: 10px; font-size: 12px; font-family: monospace;
+            position: relative; /* 为滚轮控制添加相对定位 */
+        }
+        .progress-bar { 
+            flex: 1; height: 8px; background: #ddd; border-radius: 4px; 
+            cursor: pointer; position: relative;
+        }
         .progress-fill { height: 100%; background: var(--primary); width: 0%; border-radius: 4px; }
+        
+        /* 进度条上的滚轮提示 */
+        .wheel-hint {
+            position: absolute; right: -25px; top: 50%; transform: translateY(-50%);
+            font-size: 11px; color: #666; background: #f0f0f0; padding: 2px 5px;
+            border-radius: 3px; border: 1px solid #ddd;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .progress-area:hover .wheel-hint {
+            opacity: 1;
+        }
 
         /* 帧控制区 */
         .frame-controls {
@@ -166,7 +183,7 @@
 
 <div class="header">
     <h1>视频截图拼接工具</h1>
-    <div class="hint">空格: 截图 | 回车: 下载 | 键盘 ← →: 使用"自定义"步进微调</div>
+    <div class="hint">空格: 截图 | 回车: 下载 | 键盘 ← →: 使用"自定义"步进微调 | 滚轮: 控制进度</div>
 </div>
 
 <div class="main-layout">
@@ -209,6 +226,7 @@
                 <div class="progress-fill" id="progressFill"></div>
             </div>
             <span id="totalTime">00:00</span>
+            <div class="wheel-hint" id="wheelHint">滚轮控制</div>
         </div>
 
         <!-- 帧控制按钮 -->
@@ -292,7 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dragAction: null,
         dragStart: { x: 0, y: 0 },
         rectStart: { ...this.rect },
-        videoMetrics: { scale: 1, offsetX: 0, offsetY: 0, displayW: 0, displayH: 0 }
+        videoMetrics: { scale: 1, offsetX: 0, offsetY: 0, displayW: 0, displayH: 0 },
+        wheelStep: 0.5 // 滚轮控制步进值（秒）
     };
 
     // --- DOM 元素 ---
@@ -319,7 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         progressBar: document.getElementById('progressBar'),
         progressFill: document.getElementById('progressFill'),
-        toast: document.getElementById('toast')
+        progressArea: document.querySelector('.progress-area'),
+        toast: document.getElementById('toast'),
+        wheelHint: document.getElementById('wheelHint')
     };
 
     // --- 1. 视频加载与基础设置 ---
@@ -600,6 +621,58 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`${direction > 0 ? '前进' : '后退'} ${state.customStep} 帧`);
     }
 
+    // --- 5. 新增功能：滚轮控制进度条 ---
+    function handleWheelControl(e) {
+        if (!els.video.duration) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // 计算滚轮方向：向上为负（快退），向下为正（快进）
+        const delta = e.deltaY > 0 ? 1 : -1;
+        
+        // 计算时间变化：滚轮控制使用0.5秒步进
+        const timeChange = delta * state.wheelStep;
+        
+        // 计算新的时间位置
+        let newTime = els.video.currentTime + timeChange;
+        
+        // 确保时间在有效范围内
+        newTime = Math.max(0, Math.min(newTime, els.video.duration));
+        
+        // 更新视频时间
+        els.video.currentTime = newTime;
+        
+        // 显示操作反馈
+        const direction = delta > 0 ? "快进" : "快退";
+        const timeStr = `${Math.abs(timeChange)}秒`;
+        showToast(`${direction} ${timeStr} (${formatTime(newTime)}/${formatTime(els.video.duration)})`);
+        
+        // 添加视觉反馈：改变进度条颜色
+        els.progressFill.style.backgroundColor = delta > 0 ? "#28a745" : "#dc3545";
+        setTimeout(() => {
+            els.progressFill.style.backgroundColor = "";
+        }, 300);
+    }
+
+    // 为进度条区域添加滚轮事件监听
+    els.progressArea.addEventListener('wheel', handleWheelControl, { passive: false });
+    
+    // 为视频容器也添加滚轮事件监听（方便用户在视频区域直接控制）
+    els.videoContainer.addEventListener('wheel', handleWheelControl, { passive: false });
+    
+    // 当鼠标悬停在进度条区域时显示提示
+    els.progressArea.addEventListener('mouseenter', () => {
+        if (els.video.duration) {
+            els.wheelHint.style.opacity = "1";
+        }
+    });
+    
+    els.progressArea.addEventListener('mouseleave', () => {
+        els.wheelHint.style.opacity = "0";
+    });
+
+    // 进度条点击跳转
     els.progressBar.addEventListener('click', (e) => {
         if (!els.video.duration) return;
         const rect = els.progressBar.getBoundingClientRect();
@@ -619,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatTime(s) {
+        if (isNaN(s)) return "0:00";
         const m = Math.floor(s / 60);
         const sec = Math.floor(s % 60);
         const ms = Math.floor((s % 1) * 100);
