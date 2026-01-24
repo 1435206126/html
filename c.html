@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>图片合成编辑器</title>
+    <title>图片合成编辑器 (增强版)</title>
     <style>
         :root {
             --primary: #4b6cb7;
@@ -49,15 +49,38 @@
         .btn-primary:hover { opacity: 0.9; }
         .btn-danger { background: #dc3545; color: white; }
         
-        /* 滑块样式 */
+        /* 滑块与输入框行样式 */
         .slider-row {
             display: flex;
             align-items: center;
             margin-bottom: 8px;
             font-size: 12px;
         }
-        .slider-label { width: 40px; color: #666; }
-        .slider-val { width: 40px; text-align: right; color: var(--primary); font-weight: bold; }
+        .slider-label { width: 30px; color: #666; font-weight: 500;}
+        
+        /* 新增：数字输入框样式 */
+        .slider-num-input { 
+            width: 55px; 
+            text-align: right; 
+            color: var(--primary); 
+            font-weight: bold; 
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin-left: 5px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .slider-num-input:focus {
+            border-color: var(--primary);
+            background: #f0f7ff;
+        }
+        /* 隐藏输入框默认的上下箭头(Webkit) */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            opacity: 1; /* 保留微调按钮，方便鼠标点击，如不需要可设为0 */
+        }
+
         input[type="range"] { flex: 1; cursor: pointer; margin: 0 5px; }
 
         /* 模式切换 */
@@ -242,8 +265,8 @@
         
         .preview-content {
             flex: 1;
-            overflow: hidden; /* 改为hidden，内部滚动 */
-            position: relative; /* 为canvas定位做准备 */
+            overflow: hidden;
+            position: relative;
         }
         
         /* 预览画布容器 */
@@ -255,29 +278,29 @@
             background: white;
         }
         
-        /* 关键：canvas包装器用于缩放和拖拽 */
+        /* canvas包装器 */
         .canvas-wrapper {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            cursor: grab; /* 默认手形光标 */
+            cursor: grab;
             user-select: none;
-            touch-action: none; /* 防止触摸默认行为 */
+            touch-action: none;
         }
         
         .canvas-wrapper.dragging {
-            cursor: grabbing; /* 拖拽时的手形 */
+            cursor: grabbing;
         }
         
         canvas {
             display: block;
             position: absolute;
-            transform-origin: 0 0; /* 缩放原点 */
+            transform-origin: 0 0;
             image-rendering: -webkit-optimize-contrast;
             image-rendering: crisp-edges;
-            max-width: none; /* 移除最大宽度限制 */
+            max-width: none;
         }
         
         /* 缩放控制 */
@@ -395,37 +418,41 @@
             </div>
         </div>
 
+        <!-- 修改了 max 值为 2000，并将 span 换成了 input type="number" -->
         <div class="control-group">
-            <span class="label">裁剪设置 (0-300px)</span>
+            <span class="label">裁剪设置 (0-2000px)</span>
             
             <div class="slider-row">
                 <span class="slider-label">上</span>
-                <input type="range" min="0" max="300" value="0" id="cropTop" oninput="handleCropInput('top', this.value)">
-                <span class="slider-val" id="valTop">0</span>
+                <input type="range" min="0" max="2000" value="0" id="cropTop" oninput="syncCrop('top', this.value, 'range')">
+                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valTop" oninput="syncCrop('top', this.value, 'number')">
             </div>
             <div class="slider-row">
                 <span class="slider-label">下</span>
-                <input type="range" min="0" max="300" value="0" id="cropBottom" oninput="handleCropInput('bottom', this.value)">
-                <span class="slider-val" id="valBottom">0</span>
+                <input type="range" min="0" max="2000" value="0" id="cropBottom" oninput="syncCrop('bottom', this.value, 'range')">
+                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valBottom" oninput="syncCrop('bottom', this.value, 'number')">
             </div>
             <div class="slider-row">
                 <span class="slider-label">左</span>
-                <input type="range" min="0" max="300" value="0" id="cropLeft" oninput="handleCropInput('left', this.value)">
-                <span class="slider-val" id="valLeft">0</span>
+                <input type="range" min="0" max="2000" value="0" id="cropLeft" oninput="syncCrop('left', this.value, 'range')">
+                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valLeft" oninput="syncCrop('left', this.value, 'number')">
             </div>
             <div class="slider-row">
                 <span class="slider-label">右</span>
-                <input type="range" min="0" max="300" value="0" id="cropRight" oninput="handleCropInput('right', this.value)">
-                <span class="slider-val" id="valRight">0</span>
+                <input type="range" min="0" max="2000" value="0" id="cropRight" oninput="syncCrop('right', this.value, 'range')">
+                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valRight" oninput="syncCrop('right', this.value, 'number')">
             </div>
         </div>
 
         <div class="control-group">
-            <span class="label">间距设置</span>
-            <input type="range" style="width:100%" min="0" max="100" value="0" id="spacingSlider" oninput="updateSpacing(this.value)">
-            <div style="display:flex; justify-content:space-between; margin-top:5px;">
-                <span style="font-size:12px" id="spacingVal">0px</span>
-                <input type="color" value="#ffffff" style="height:20px; width:40px; border:none;" id="spacingColor" oninput="renderPreview()">
+            <span class="label">间距设置 (0-2000px)</span>
+            <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
+                <input type="range" style="flex:1" min="0" max="2000" value="0" id="spacingSlider" oninput="syncSpacing(this.value, 'range')">
+                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="spacingVal" oninput="syncSpacing(this.value, 'number')">
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">
+                <span style="font-size:12px; color:#666;">背景色:</span>
+                <input type="color" value="#ffffff" style="height:20px; width:40px; border:none; padding:0; cursor:pointer;" id="spacingColor" oninput="renderPreview()">
             </div>
         </div>
 
@@ -494,7 +521,6 @@
         const fileInput = document.getElementById('fileInput');
         const thumbnailList = document.getElementById('thumbnailList');
         const previewCanvas = document.getElementById('previewCanvas');
-        const previewContent = document.getElementById('previewContent');
         const canvasWrapper = document.getElementById('canvasWrapper');
         const zoomHint = document.getElementById('zoomHint');
 
@@ -587,19 +613,12 @@
                 itemEl.addEventListener('dragstart', (e) => {
                     e.dataTransfer.setData('text/plain', index);
                     itemEl.classList.add('dragging');
-                    
-                    // 显示所有提示线
-                    document.querySelectorAll('.drag-hint').forEach(hint => {
-                        hint.classList.add('active');
-                    });
+                    document.querySelectorAll('.drag-hint').forEach(hint => hint.classList.add('active'));
                 });
                 
                 itemEl.addEventListener('dragend', () => {
                     itemEl.classList.remove('dragging');
-                    // 隐藏所有提示线
-                    document.querySelectorAll('.drag-hint').forEach(hint => {
-                        hint.classList.remove('active');
-                    });
+                    document.querySelectorAll('.drag-hint').forEach(hint => hint.classList.remove('active'));
                 });
                 
                 itemEl.addEventListener('dragover', (e) => {
@@ -610,10 +629,7 @@
                     e.preventDefault();
                     const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
                     const toIndex = index;
-                    
-                    if (fromIndex !== toIndex) {
-                        moveImage(fromIndex, toIndex);
-                    }
+                    if (fromIndex !== toIndex) moveImage(fromIndex, toIndex);
                 });
                 
                 // 点击选中
@@ -646,7 +662,7 @@
                 const offsetX = (thumbCanvas.width - drawWidth) / 2;
                 const offsetY = (thumbCanvas.height - drawHeight) / 2;
                 
-                // 绘制裁剪后的图片
+                // 绘制
                 thumbCtx.fillStyle = '#f5f5f5';
                 thumbCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
                 thumbCtx.drawImage(
@@ -655,7 +671,6 @@
                     offsetX, offsetY, drawWidth, drawHeight
                 );
                 
-                // 添加裁剪边框提示
                 if (t > 0 || b > 0 || l > 0 || r > 0) {
                     thumbCtx.strokeStyle = 'rgba(255, 153, 0, 0.6)';
                     thumbCtx.lineWidth = 2;
@@ -691,7 +706,6 @@
                 document.getElementById('selectedInfo').textContent = `当前调整: ${images[index].name}`;
             }
             
-            // 确保选中的缩略图在可视区域内
             const selectedItem = thumbnailList.querySelector(`.thumbnail-item[data-index="${index}"]`);
             if (selectedItem) {
                 selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -719,20 +733,39 @@
             }
         }
 
-        // ========== 输入控件更新 ==========
+        // ========== 输入控件更新 (双向绑定核心逻辑) ==========
         function updateInputs(cropObj) {
             ['Top','Bottom','Left','Right'].forEach(side => {
                 const key = side.toLowerCase();
                 const val = cropObj[key];
+                // 同时更新滑块和输入框
                 document.getElementById('crop'+side).value = val;
-                document.getElementById('val'+side).textContent = val;
+                document.getElementById('val'+side).value = val;
             });
         }
 
-        function handleCropInput(side, value) {
-            const val = parseInt(value) || 0;
-            document.getElementById('val'+side.charAt(0).toUpperCase() + side.slice(1)).textContent = val;
+        // 处理裁剪数值同步
+        function syncCrop(side, value, source) {
+            let val = parseInt(value);
+            if (isNaN(val)) val = 0;
+            if (val < 0) val = 0;
+            if (val > 2000) val = 2000;
 
+            const sliderId = 'crop' + side.charAt(0).toUpperCase() + side.slice(1);
+            const inputId = 'val' + side.charAt(0).toUpperCase() + side.slice(1);
+
+            // 根据来源同步另一个控件
+            if (source === 'range') {
+                document.getElementById(inputId).value = val;
+            } else {
+                document.getElementById(sliderId).value = val;
+            }
+
+            // 执行实际逻辑
+            handleCropLogic(side.toLowerCase(), val);
+        }
+
+        function handleCropLogic(side, val) {
             if (currentMode === 'global') {
                 globalCrop[side] = val;
             } else {
@@ -740,16 +773,31 @@
                 images[selectedIndex].crop[side] = val;
             }
             
-            // 实时更新
             renderThumbnails();
             renderPreview();
         }
 
-        function updateSpacing(val) {
-            spacing = parseInt(val);
-            document.getElementById('spacingVal').textContent = val + 'px';
+        // 处理间距数值同步
+        function syncSpacing(value, source) {
+            let val = parseInt(value);
+            if (isNaN(val)) val = 0;
+            if (val < 0) val = 0;
+            if (val > 2000) val = 2000;
+
+            if (source === 'range') {
+                document.getElementById('spacingVal').value = val;
+            } else {
+                document.getElementById('spacingSlider').value = val;
+            }
+
+            updateSpacingLogic(val);
+        }
+
+        function updateSpacingLogic(val) {
+            spacing = val;
             renderPreview();
         }
+
 
         // ========== 图片管理 ==========
         function moveImage(from, to) {
@@ -789,7 +837,6 @@
         }
 
         function clearAll() {
-            // 直接清空，不需要确认
             images = [];
             globalCrop = { top: 0, bottom: 0, left: 0, right: 0 };
             selectedIndex = -1;
@@ -803,7 +850,6 @@
         // ========== 预览渲染 ==========
         function renderPreview() {
             if (images.length === 0) {
-                // 清空画布
                 previewCanvas.width = 800;
                 previewCanvas.height = 400;
                 canvasSize.width = 800;
@@ -822,7 +868,6 @@
                 return;
             }
             
-            // 计算每张图片的位置和尺寸
             let maxWidth = 0;
             const renderData = images.map((img, idx) => {
                 const c = img.crop;
@@ -857,24 +902,19 @@
                 }
             });
             
-            // 设置canvas的原始像素尺寸
             canvasSize.width = maxWidth;
             canvasSize.height = totalHeight;
             previewCanvas.width = canvasSize.width;
             previewCanvas.height = canvasSize.height;
             
             const ctx = previewCanvas.getContext('2d');
-            
-            // 清除画布
             ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             
-            // 绘制间距背景
             if (spacing > 0) {
                 ctx.fillStyle = document.getElementById('spacingColor').value;
                 ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
             }
 
-            // 绘制图片
             let currentY = 0;
             renderData.forEach((d) => {
                 const renderHeight = d.sh * d.renderScale;
@@ -887,20 +927,15 @@
                 currentY += renderHeight + spacing;
             });
             
-            // 更新显示
             updateCanvasDisplay();
         }
 
         // ========== 缩放和拖拽功能 ==========
         function updateCanvasDisplay() {
-            // 更新canvas的CSS变换
             previewCanvas.style.transform = `translate(${transformMatrix.x}px, ${transformMatrix.y}px) scale(${transformMatrix.scale})`;
-            
-            // 更新缩放显示
             document.getElementById('zoomLevel').textContent = Math.round(transformMatrix.scale * 100) + '%';
         }
 
-        // 滚轮缩放函数
         function handleWheelZoom(e) {
             e.preventDefault();
             
@@ -908,20 +943,16 @@
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             
-            // 计算鼠标在canvas上的相对位置
             const canvasX = (mouseX - transformMatrix.x) / transformMatrix.scale;
             const canvasY = (mouseY - transformMatrix.y) / transformMatrix.scale;
             
-            // 缩放因子
             const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
             const newScale = transformMatrix.scale * zoomFactor;
             
-            // 限制缩放范围
             const minScale = 0.1;
             const maxScale = 10;
             if (newScale < minScale || newScale > maxScale) return;
             
-            // 以鼠标位置为中心缩放
             const newX = mouseX - canvasX * newScale;
             const newY = mouseY - canvasY * newScale;
             
@@ -930,14 +961,11 @@
             transformMatrix.y = newY;
             
             updateCanvasDisplay();
-            
-            // 显示提示
             showZoomHint(`缩放: ${Math.round(newScale * 100)}%`);
         }
 
-        // 鼠标拖拽函数
         function startDrag(e) {
-            if (e.button !== 0) return; // 只响应左键
+            if (e.button !== 0) return;
             
             isDragging = true;
             lastMousePos.x = e.clientX;
@@ -967,24 +995,17 @@
             canvasWrapper.classList.remove('dragging');
         }
 
-        // 按钮缩放函数
         function changeZoom(delta) {
             const container = canvasWrapper.getBoundingClientRect();
             const centerX = container.width / 2;
             const centerY = container.height / 2;
             
-            // 计算中心点在canvas上的相对位置
             const canvasX = (centerX - transformMatrix.x) / transformMatrix.scale;
             const canvasY = (centerY - transformMatrix.y) / transformMatrix.scale;
             
             const newScale = transformMatrix.scale + delta;
+            if (newScale < 0.1 || newScale > 10) return;
             
-            // 限制缩放范围
-            const minScale = 0.1;
-            const maxScale = 10;
-            if (newScale < minScale || newScale > maxScale) return;
-            
-            // 以中心点缩放
             const newX = centerX - canvasX * newScale;
             const newY = centerY - canvasY * newScale;
             
@@ -995,22 +1016,17 @@
             updateCanvasDisplay();
         }
 
-        // 重置视图
         function resetView() {
-            // 计算居中位置
             const container = canvasWrapper.getBoundingClientRect();
             const canvasWidth = canvasSize.width;
             const canvasHeight = canvasSize.height;
             
-            // 如果canvas尺寸为0，则不重置
             if (canvasWidth === 0 || canvasHeight === 0) return;
             
-            // 计算合适的缩放比例以适配容器
             const scaleX = container.width / canvasWidth;
             const scaleY = container.height / canvasHeight;
-            const newScale = Math.min(scaleX, scaleY) * 0.9; // 90%适配
+            const newScale = Math.min(scaleX, scaleY) * 0.9;
             
-            // 居中位置
             const newX = (container.width - canvasWidth * newScale) / 2;
             const newY = (container.height - canvasHeight * newScale) / 2;
             
@@ -1022,31 +1038,25 @@
             showZoomHint("视图已重置");
         }
 
-        // 显示缩放提示
         function showZoomHint(message) {
             zoomHint.textContent = message;
             zoomHint.classList.add('show');
-            
             clearTimeout(zoomHint.timeout);
             zoomHint.timeout = setTimeout(() => {
                 zoomHint.classList.remove('show');
             }, 1500);
         }
 
-        // ========== 事件监听器设置 ==========
+        // ========== 事件监听器 ==========
         function setupInteraction() {
-            // 滚轮缩放
             canvasWrapper.addEventListener('wheel', handleWheelZoom, { passive: false });
-            
-            // 鼠标拖拽
             canvasWrapper.addEventListener('mousedown', startDrag);
             document.addEventListener('mousemove', handleDrag);
             document.addEventListener('mouseup', stopDrag);
             
-            // 触摸屏支持
+            // 触摸支持
             canvasWrapper.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 1) {
-                    // 单指触摸模拟鼠标拖拽
                     const touch = e.touches[0];
                     startDrag({
                         button: 0,
@@ -1054,9 +1064,6 @@
                         clientY: touch.clientY,
                         preventDefault: () => e.preventDefault()
                     });
-                } else if (e.touches.length === 2) {
-                    // 双指缩放手势
-                    e.preventDefault();
                 }
             }, { passive: false });
             
@@ -1068,11 +1075,9 @@
                         clientY: touch.clientY
                     });
                 }
-                // 双指缩放逻辑可以在这里添加
             }, { passive: false });
             
             canvasWrapper.addEventListener('touchend', stopDrag);
-            canvasWrapper.addEventListener('touchcancel', stopDrag);
         }
 
         // ========== 下载功能 ==========
@@ -1082,11 +1087,9 @@
                 return;
             }
             
-            // 创建临时canvas用于下载（原始尺寸，100%缩放）
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             
-            // 重新计算尺寸（与renderPreview逻辑相同）
             let maxWidth = 0;
             const renderData = images.map((img) => {
                 const c = img.crop;
@@ -1116,25 +1119,20 @@
                 totalHeight += renderHeight + spacing;
             });
             
-            if (renderData.length > 0) {
-                totalHeight -= spacing;
-            }
+            if (renderData.length > 0) totalHeight -= spacing;
             
             tempCanvas.width = maxWidth;
             tempCanvas.height = totalHeight;
             
-            // 绘制间距背景
             if (spacing > 0) {
                 tempCtx.fillStyle = document.getElementById('spacingColor').value;
                 tempCtx.fillRect(0, 0, maxWidth, totalHeight);
             }
 
-            // 绘制图片
             let currentY = 0;
             renderData.forEach((d) => {
                 const renderScale = maxWidth / d.sw;
                 const renderHeight = d.sh * renderScale;
-                
                 tempCtx.drawImage(
                     d.imgObj,
                     d.sx, d.sy, d.sw, d.sh,
@@ -1145,7 +1143,6 @@
             
             const link = document.createElement('a');
             const filename = `合成图片_${Date.now()}.jpg`;
-            
             link.download = filename;
             link.href = tempCanvas.toDataURL('image/jpeg', 0.92);
             document.body.appendChild(link);
@@ -1153,25 +1150,14 @@
             document.body.removeChild(link);
         }
 
-        // ========== 初始化 ==========
         function init() {
-            // 设置交互事件
             setupInteraction();
-            
-            // 初始渲染
             renderPreview();
-            
-            // 初始重置视图
             setTimeout(resetView, 100);
         }
 
-        // 页面加载完成后初始化
         window.addEventListener('load', init);
-        
-        // 窗口大小变化时重新调整视图
-        window.addEventListener('resize', () => {
-            setTimeout(resetView, 100);
-        });
+        window.addEventListener('resize', () => { setTimeout(resetView, 100); });
 
     </script>
 </body>
