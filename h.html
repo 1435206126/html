@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>极简图片缝合工具</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --accent-color: #ff4757;
+            --menu-bg: #2d2d2d;
+        }
+
+        body { margin: 0; background: var(--bg-color); color: white; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+        /* 顶部上传区 */
+        header {
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        .upload-label {
+            background: #444;
+            padding: 8px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+            border: 1px solid #555;
+        }
+        .upload-label:hover { background: #555; border-color: #888; }
+
+        /* 主舞台 */
+        #stage {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            touch-action: none;
+            cursor: crosshair; /* 默认选区光标 */
+        }
+
+        #canvas-container {
+            position: absolute;
+            transform-origin: 0 0;
+            display: none; /* 初始隐藏，防止白块 */
+        }
+
+        canvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.5); cursor: grab; }
+        canvas:active { cursor: grabbing; }
+
+        /* 全屏贯穿虚线 */
+        .guide-line {
+            position: fixed;
+            left: 0;
+            right: 0;
+            height: 0;
+            border-top: 1px dashed var(--accent-color);
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+        }
+
+        /* 选区遮罩 */
+        #selection-overlay {
+            position: absolute;
+            left: -5000px; right: -5000px; /* 横向无限延伸感 */
+            background: rgba(255, 71, 87, 0.2);
+            border-top: 1px solid var(--accent-color);
+            border-bottom: 1px solid var(--accent-color);
+            pointer-events: none;
+            display: none;
+        }
+
+        /* 自定义右键菜单 */
+        #context-menu {
+            position: fixed;
+            display: none;
+            background: var(--menu-bg);
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            min-width: 150px;
+            z-index: 1000;
+            padding: 5px 0;
+        }
+        .menu-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .menu-item:hover { background: var(--accent-color); }
+        .menu-item.disabled { color: #666; pointer-events: none; }
+        .menu-divider { height: 1px; background: #444; margin: 5px 0; }
+
+        #file-input { display: none; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <label class="upload-label" for="file-input">选择图片开始</label>
+        <input type="file" id="file-input" accept="image/*">
+    </header>
+
+    <div id="stage">
+        <!-- 贯穿全屏的辅助线 -->
+        <div id="guide-y" class="guide-line"></div>
+        
+        <div id="canvas-container">
+            <canvas id="mainCanvas"></canvas>
+            <div id="selection-overlay"></div>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="context-menu">
+        <div class="menu-item" id="menu-cut" style="color: #ff4757; font-weight: bold; display: none;">✂ 执行切除并缝合</div>
+        <div class="menu-divider" id="menu-cut-divider" style="display: none;"></div>
+        <div class="menu-item" id="menu-undo">撤销 (Ctrl+Z)</div>
+        <div class="menu-item" id="menu-copy">复制图片</div>
+        <div class="menu-item" id="menu-save">保存图片</div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" onclick="document.getElementById('file-input').click()">重新上传</div>
+    </div>
+
+    <script>
+        const stage = document.getElementById('stage');
+        const container = document.getElementById('canvas-container');
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const guideY = document.getElementById('guide-y');
+        const overlay = document.getElementById('selection-overlay');
+        const contextMenu = document.getElementById('context-menu');
+        
+        let img = new Image();
+        let scale = 1.0, translateX = 0, translateY = 0;
+        let history = [];
+        let isPanning = false, isSelecting = false;
+        let startX, startY, selectY1, selectY2;
+
+        // --- 1. 图片初始化 ---
+        document.getElementById('file-input').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                img.onload = () => {
+                    history = [];
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    container.style.display = 'block';
+                    // 初始缩放
+                    scale = Math.min(stage.clientWidth / canvas.width, (stage.clientHeight - 40) / canvas.height, 1);
+                    translateX = (stage.clientWidth - canvas.width * scale) / 2;
+                    translateY = (stage.clientHeight - canvas.height * scale) / 2;
+                    updateTransform();
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // --- 2. 缩放逻辑 (中心缩放) ---
+        stage.addEventListener('wheel', (e) => {
+            if (!img.src) return;
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const oldScale = scale;
+            scale = Math.min(Math.max(0.01, scale * delta), 10);
+            const rect = stage.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            translateX = mx - (mx - translateX) * (scale / oldScale);
+            translateY = my - (my - translateY) * (scale / oldScale);
+            updateTransform();
+        }, { passive: false });
+
+        function updateTransform() {
+            container.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        // --- 3. 鼠标交互 (核心区分图片内外) ---
+        stage.addEventListener('mousedown', (e) => {
+            if (!img.src || e.button !== 0) return; // 仅左键触发
+
+            const isOverImage = e.target === canvas;
+            
+            if (isOverImage) {
+                // 在图片内：开启平移
+                isPanning = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+            } else {
+                // 在图片外：开启选区
+                isSelecting = true;
+                const rect = canvas.getBoundingClientRect();
+                startY = (e.clientY - rect.top) / scale;
+                overlay.style.display = 'none';
+            }
+            contextMenu.style.display = 'none';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!img.src) return;
+
+            // 无论何时，移动时都显示横向虚线（作为辅助）
+            guideY.style.display = 'block';
+            guideY.style.top = e.clientY + 'px';
+
+            if (isPanning) {
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            } else if (isSelecting) {
+                const rect = canvas.getBoundingClientRect();
+                let curY = (e.clientY - rect.top) / scale;
+                // 允许超出图片一点，但计算裁剪时会限制
+                selectY1 = Math.min(startY, curY);
+                selectY2 = Math.max(startY, curY);
+
+                overlay.style.display = 'block';
+                overlay.style.top = selectY1 + 'px';
+                overlay.style.height = (selectY2 - selectY1) + 'px';
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isPanning = false;
+            isSelecting = false;
+        });
+
+        // --- 4. 自定义右键菜单 ---
+        window.addEventListener('contextmenu', (e) => {
+            if (!img.src) return;
+            e.preventDefault();
+            
+            // 如果有选区，显示裁剪选项
+            const hasSelection = overlay.style.display === 'block' && Math.abs(selectY2 - selectY1) > 2;
+            document.getElementById('menu-cut').style.display = hasSelection ? 'block' : 'none';
+            document.getElementById('menu-cut-divider').style.display = hasSelection ? 'block' : 'none';
+            document.getElementById('menu-undo').classList.toggle('disabled', history.length === 0);
+
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+        });
+
+        // 点击其他位置隐藏菜单
+        window.addEventListener('click', () => contextMenu.style.display = 'none');
+
+        // --- 5. 菜单功能实现 ---
+        document.getElementById('menu-cut').onclick = () => {
+            saveState();
+            // 限制裁剪范围在图片内
+            const realY1 = Math.max(0, selectY1);
+            const realY2 = Math.min(canvas.height, selectY2);
+            const cutH = realY2 - realY1;
+            if (cutH <= 0) return;
+
+            const newH = canvas.height - cutH;
+            const temp = document.createElement('canvas');
+            temp.width = canvas.width;
+            temp.height = newH;
+            const tCtx = temp.getContext('2d');
+
+            tCtx.drawImage(canvas, 0, 0, canvas.width, realY1, 0, 0, canvas.width, realY1);
+            tCtx.drawImage(canvas, 0, realY2, canvas.width, canvas.height - realY2, 0, realY1, canvas.width, canvas.height - realY2);
+
+            canvas.height = newH;
+            ctx.drawImage(temp, 0, 0);
+            overlay.style.display = 'none';
+        };
+
+        function saveState() {
+            history.push(canvas.toDataURL());
+            if (history.length > 20) history.shift();
+        }
+
+        document.getElementById('menu-undo').onclick = () => {
+            if (history.length === 0) return;
+            const data = history.pop();
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                canvas.width = tempImg.width;
+                canvas.height = tempImg.height;
+                ctx.drawImage(tempImg, 0, 0);
+            };
+            tempImg.src = data;
+            overlay.style.display = 'none';
+        };
+
+        document.getElementById('menu-save').onclick = () => {
+            const a = document.createElement('a');
+            a.download = `cut_${Date.now()}.png`;
+            a.href = canvas.toDataURL();
+            a.click();
+        };
+
+        document.getElementById('menu-copy').onclick = () => {
+            canvas.toBlob(blob => {
+                const item = new ClipboardItem({ "image/png": blob });
+                navigator.clipboard.write([item]).then(() => alert("图片已复制到剪贴板"));
+            });
+        };
+
+        // 快捷键撤销
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') document.getElementById('menu-undo').click();
+        });
+    </script>
+</body>
+</html>
