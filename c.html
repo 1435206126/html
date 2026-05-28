@@ -2,1163 +2,1062 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>图片合成编辑器 (增强版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>图片合成编辑器 - 智能全局模式 (优化版)</title>
     <style>
-        :root {
-            --primary: #4b6cb7;
-            --bg: #f5f7fa;
-            --sidebar-w: 260px;
-            --thumbnail-w: 180px;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-        
+
         body {
-            background: var(--bg);
+            background: #eef2f7;
             display: flex;
             height: 100vh;
             overflow: hidden;
         }
-        
-        /* ===== 第一栏：控制面板 ===== */
-        .control-sidebar {
-            width: var(--sidebar-w);
-            background: white;
-            border-right: 1px solid #ddd;
-            padding: 20px;
+
+        /* ========= 全局 Toast 轻提示 ========= */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            overflow-y: auto;
+            gap: 12px;
+            pointer-events: none;
+        }
+        .toast {
+            background: rgba(31, 42, 68, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ========= 左侧控制栏 ========= */
+        .control-sidebar {
+            width: 260px;
+            background: white;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
             flex-shrink: 0;
-            z-index: 10;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            height: 100vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .sidebar-inner {
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px 20px 16px;
+            gap: 18px;
+            flex: 1;
+        }
+
+        .title-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+        .title-section h2 {
+            font-size: 18px;
+            color: #1f2a44;
+            font-weight: 600;
+        }
+
+        .upload-square {
+            background: #f0f4fe;
+            border: 1.5px dashed #4b6cb7;
+            border-radius: 16px;
+            padding: 12px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .upload-square:hover {
+            background: #e6edfc;
+            transform: scale(0.98);
+        }
+        .upload-square .plus-icon {
+            font-size: 38px;
+            font-weight: 300;
+            color: #4b6cb7;
+        }
+        .upload-square .upload-text-small {
+            font-size: 12px;
+            color: #5a6e9e;
+            margin-top: 6px;
+            font-weight: 500;
         }
 
         .control-group {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 15px;
+            border-bottom: 1px solid #ecf0f3;
+            padding-bottom: 14px;
         }
-        .label { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px; display: block; }
-        
-        .btn {
-            width: 100%; padding: 10px; border: none; border-radius: 6px;
-            cursor: pointer; font-weight: bold; transition: 0.2s; margin-bottom: 5px;
+        .label {
+            font-size: 13px;
+            font-weight: bold;
+            color: #2c3e58;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
         }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { opacity: 0.9; }
-        .btn-danger { background: #dc3545; color: white; }
-        
-        /* 滑块与输入框行样式 */
+        .label-hint {
+            font-size: 10px;
+            color: #7b8c9e;
+            font-weight: normal;
+        }
+
+        .mode-switch {
+            display: flex;
+            background: #eef2f5;
+            border-radius: 40px;
+            padding: 2px;
+        }
+        .mode-switch button {
+            flex: 1;
+            border: none;
+            background: none;
+            padding: 6px;
+            font-size: 12px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .mode-switch button.active {
+            background: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            color: #4b6cb7;
+        }
+
         .slider-row {
             display: flex;
             align-items: center;
+            gap: 6px;
             margin-bottom: 8px;
             font-size: 12px;
         }
-        .slider-label { width: 30px; color: #666; font-weight: 500;}
-        
-        /* 新增：数字输入框样式 */
-        .slider-num-input { 
-            width: 55px; 
-            text-align: right; 
-            color: var(--primary); 
-            font-weight: bold; 
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 2px 4px;
-            margin-left: 5px;
-            outline: none;
-            transition: border-color 0.2s;
+        .slider-label {
+            width: 24px;
+            font-weight: 500;
+            color: #4a627a;
         }
-        .slider-num-input:focus {
-            border-color: var(--primary);
-            background: #f0f7ff;
+        input[type="range"] {
+            flex: 1;
+            height: 4px;
+            border-radius: 10px;
         }
-        /* 隐藏输入框默认的上下箭头(Webkit) */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-            opacity: 1; /* 保留微调按钮，方便鼠标点击，如不需要可设为0 */
+        .slider-num-input {
+            width: 52px;
+            text-align: right;
+            border: 1px solid #cfdfed;
+            border-radius: 8px;
+            padding: 4px 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #1e2f45;
         }
 
-        input[type="range"] { flex: 1; cursor: pointer; margin: 0 5px; }
-
-        /* 模式切换 */
-        .mode-switch { display: flex; background: #eee; border-radius: 4px; padding: 2px; }
-        .mode-switch button {
-            flex: 1; border: none; background: none; padding: 6px;
-            font-size: 12px; cursor: pointer; border-radius: 4px;
+        .square-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 8px;
         }
-        .mode-switch button.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: var(--primary); font-weight: bold;}
+        .square-btn {
+            background: #f8fafd;
+            border: 1px solid #dce5ef;
+            border-radius: 20px;
+            padding: 12px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+            font-size: 12px;
+            color: #2c3e58;
+        }
+        .square-btn span:first-child {
+            font-size: 22px;
+        }
+        .square-btn:hover {
+            background: #eef3fc;
+            border-color: #a0bbdf;
+        }
 
-        /* ===== 第二栏：缩略图列表 ===== */
+        /* 缩略图栏 */
         .thumbnail-sidebar {
-            width: var(--thumbnail-w);
-            background: #f8f9fa;
-            border-right: 1px solid #ddd;
+            width: 180px;
+            background: #f9fbfd;
+            border-right: 1px solid #e2e8f0;
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
+            height: 100vh;
             overflow: hidden;
         }
-        
         .thumbnail-header {
-            padding: 15px;
+            padding: 14px 12px;
             background: white;
-            border-bottom: 1px solid #ddd;
-            text-align: center;
+            border-bottom: 1px solid #e6edf4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        
         .thumbnail-header h4 {
-            font-size: 14px;
-            color: #333;
-            margin: 0;
+            font-size: 13px;
+            font-weight: 600;
         }
-        
+        .batch-save-icon {
+            background: #4b6cb7;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+        }
         .thumbnail-list {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 12px 8px;
         }
-        
-        /* 缩略图项 */
         .thumbnail-item {
             background: white;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            padding: 10px;
+            border-radius: 14px;
+            margin-bottom: 12px;
+            padding: 8px;
             cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1.5px solid transparent;
+            transition: 0.1s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             position: relative;
         }
-        
+        .thumbnail-item.global-selected {
+            border-color: #4b6cb7;
+            background: #eef3ff;
+            box-shadow: 0 2px 8px rgba(75,108,183,0.2);
+        }
         .thumbnail-item.selected {
-            border-color: var(--primary);
-            background: #eef4ff;
-            box-shadow: 0 0 0 2px rgba(75, 108, 183, 0.3);
+            border-color: #ff9900;
+            background: #fff8e7;
         }
-        
-        .thumbnail-item.dragging {
-            opacity: 0.7;
-            transform: scale(0.98);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        
         .thumbnail-img {
             width: 100%;
-            height: 100px;
-            background: #eee;
-            border-radius: 4px;
-            overflow: hidden;
+            height: 90px;
+            background: #f1f5f9;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            overflow: hidden;
         }
-        
-        .thumbnail-img img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        
         .thumbnail-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 11px;
-        }
-        
-        .thumbnail-name {
-            color: #333;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1;
-        }
-        
-        .thumbnail-index {
-            background: var(--primary);
-            color: white;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 10px;
-            font-weight: bold;
-            margin-right: 5px;
-            flex-shrink: 0;
         }
-        
-        .thumbnail-item.selected .thumbnail-index {
-            background: #ff9900;
-        }
-        
-        .thumbnail-del {
-            color: #999;
+        .single-save-btn {
+            background: none;
+            border: none;
+            font-size: 14px;
             cursor: pointer;
+            color: #4b6cb7;
+            padding: 0 4px;
+        }
+        .thumbnail-del {
+            color: #aaa;
             font-size: 16px;
-            padding: 0 5px;
-            flex-shrink: 0;
+            cursor: pointer;
+            padding: 0 4px;
         }
-        
-        .thumbnail-del:hover {
-            color: red;
-        }
-        
-        /* 拖拽提示 */
-        .drag-hint {
-            height: 4px;
-            background: var(--primary);
-            border-radius: 2px;
-            margin: 2px 0;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        
-        .drag-hint.active {
-            opacity: 1;
-        }
-        
-        /* 空状态 */
-        .empty-thumbnails {
-            text-align: center;
-            color: #999;
-            padding: 40px 20px;
-            font-size: 13px;
-        }
-        
-        /* ===== 第三栏：预览区域 ===== */
+        .drag-hint { height: 3px; background: #4b6cb7; margin: 2px 0; opacity: 0; transition: 0.1s; }
+        .drag-hint.active { opacity: 1; }
+
+        /* 预览区域 */
         .preview-area {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #f0f2f5;
+            background: #eef2f8;
             overflow: hidden;
+            position: relative;
         }
-        
         .preview-header {
-            padding: 15px 20px;
+            padding: 10px 16px;
             background: white;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
-            align-items: center;
         }
-        
-        .preview-header h4 {
-            font-size: 16px;
-            color: #333;
-            margin: 0;
-        }
-        
-        .preview-tools {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
         .preview-content {
             flex: 1;
-            overflow: hidden;
             position: relative;
+            background: #dadfe8;
         }
-        
-        /* 预览画布容器 */
         .preview-container {
-            position: relative;
             width: 100%;
             height: 100%;
+            position: relative;
             overflow: hidden;
-            background: white;
+            background: #f8fafc;
         }
-        
-        /* canvas包装器 */
         .canvas-wrapper {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            position: absolute;
+            transform-origin: 0 0;
+            image-rendering: crisp-edges;
+        }
+        .empty-upload-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            cursor: grab;
-            user-select: none;
-            touch-action: none;
-        }
-        
-        .canvas-wrapper.dragging {
-            cursor: grabbing;
-        }
-        
-        canvas {
-            display: block;
-            position: absolute;
-            transform-origin: 0 0;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
-            max-width: none;
-        }
-        
-        /* 缩放控制 */
-        .zoom-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: white;
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-        }
-        
-        .zoom-btn {
-            width: 30px;
-            height: 30px;
-            background: #f8f9fa;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
-        }
-        
-        .zoom-btn:hover {
-            background: #e9ecef;
-        }
-        
-        .zoom-level {
-            font-size: 12px;
-            color: #333;
-            min-width: 60px;
-            text-align: center;
-        }
-        
-        /* 文件上传区域 */
-        .upload-area {
-            border: 2px dashed #ddd;
-            border-radius: 8px;
-            padding: 25px;
-            text-align: center;
-            margin-top: 10px;
+            background: #f8fafc;
             cursor: pointer;
-            transition: all 0.3s;
+            z-index: 20;
         }
-        
-        .upload-area:hover {
-            border-color: var(--primary);
-            background: #f8f9fa;
+        .big-plus {
+            background: rgba(75, 108, 183, 0.08);
+            width: 180px;
+            height: 180px;
+            border-radius: 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #9bb4da;
         }
-        
-        .upload-icon {
-            font-size: 40px;
-            color: #6c757d;
-            margin-bottom: 10px;
+        .big-plus span:first-child {
+            font-size: 70px;
+            font-weight: 300;
+            color: #4b6cb7;
         }
-        
-        .upload-text {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 5px;
+        .zoom-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
-        
-        .upload-hint {
-            font-size: 12px;
-            color: #999;
+        .zoom-btn {
+            width: 28px;
+            height: 28px;
+            background: #f0f2f5;
+            border: 1px solid #d0dae8;
+            border-radius: 8px;
+            cursor: pointer;
         }
-        
-        /* 缩放提示 */
         .zoom-hint {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0,0,0,0.7);
             color: white;
-            padding: 8px 12px;
-            border-radius: 4px;
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 12px;
-            z-index: 1000;
-            pointer-events: none;
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: 0.2s;
+            z-index: 200;
+            pointer-events: none;
         }
-        
         .zoom-hint.show {
             opacity: 1;
         }
-
     </style>
 </head>
 <body>
 
-    <!-- 第一栏：控制面板 -->
-    <div class="control-sidebar">
-        <h2 style="font-size: 18px; color: #333; margin-bottom: 10px;">图片合成设置</h2>
-        
-        <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
-        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">📁</div>
-            <div class="upload-text">点击或拖拽添加图片</div>
-            <div class="upload-hint">支持 JPG、PNG 格式</div>
+<div id="toastContainer" class="toast-container"></div>
+
+<div class="control-sidebar">
+    <div class="sidebar-inner">
+        <div class="title-section">
+            <h2>多图合成</h2>
         </div>
-        
+        <div class="upload-square" id="compactUploadBtn">
+            <div class="plus-icon">+</div>
+            <div class="upload-text-small">添加图片</div>
+        </div>
+        <input type="file" id="fileInput" multiple accept="image/*" style="display:none">
+
         <div class="control-group">
             <span class="label">裁剪模式</span>
             <div class="mode-switch">
-                <button class="active" data-mode="single" onclick="setMode('single')">选中微调</button>
-                <button data-mode="global" onclick="setMode('global')">全局统一</button>
+                <button data-mode="single" onclick="setMode('single')">单张微调</button>
+                <button data-mode="global" onclick="setMode('global')">智能全局</button>
             </div>
-            <div style="margin-top: 8px; font-size: 12px; color: #666; min-height: 16px;" id="selectedInfo">
-                请添加并选中图片
-            </div>
-        </div>
-
-        <!-- 修改了 max 值为 2000，并将 span 换成了 input type="number" -->
-        <div class="control-group">
-            <span class="label">裁剪设置 (0-2000px)</span>
-            
-            <div class="slider-row">
-                <span class="slider-label">上</span>
-                <input type="range" min="0" max="2000" value="0" id="cropTop" oninput="syncCrop('top', this.value, 'range')">
-                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valTop" oninput="syncCrop('top', this.value, 'number')">
-            </div>
-            <div class="slider-row">
-                <span class="slider-label">下</span>
-                <input type="range" min="0" max="2000" value="0" id="cropBottom" oninput="syncCrop('bottom', this.value, 'range')">
-                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valBottom" oninput="syncCrop('bottom', this.value, 'number')">
-            </div>
-            <div class="slider-row">
-                <span class="slider-label">左</span>
-                <input type="range" min="0" max="2000" value="0" id="cropLeft" oninput="syncCrop('left', this.value, 'range')">
-                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valLeft" oninput="syncCrop('left', this.value, 'number')">
-            </div>
-            <div class="slider-row">
-                <span class="slider-label">右</span>
-                <input type="range" min="0" max="2000" value="0" id="cropRight" oninput="syncCrop('right', this.value, 'range')">
-                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="valRight" oninput="syncCrop('right', this.value, 'number')">
-            </div>
+            <div style="font-size: 11px; color:#667; margin-top: 6px;" id="selectedInfo">未选中图片</div>
         </div>
 
         <div class="control-group">
-            <span class="label">间距设置 (0-2000px)</span>
-            <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
-                <input type="range" style="flex:1" min="0" max="2000" value="0" id="spacingSlider" oninput="syncSpacing(this.value, 'range')">
-                <input type="number" class="slider-num-input" min="0" max="2000" value="0" id="spacingVal" oninput="syncSpacing(this.value, 'number')">
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">
-                <span style="font-size:12px; color:#666;">背景色:</span>
-                <input type="color" value="#ffffff" style="height:20px; width:40px; border:none; padding:0; cursor:pointer;" id="spacingColor" oninput="renderPreview()">
-            </div>
+            <span class="label">裁剪值</span>
+            <div class="slider-row"><span class="slider-label">上</span><input type="range" min="0" value="0" id="cropTop" oninput="syncCrop('top',this.value)"><input type="number" class="slider-num-input" id="valTop" oninput="syncCrop('top',this.value)"></div>
+            <div class="slider-row"><span class="slider-label">下</span><input type="range" min="0" value="0" id="cropBottom" oninput="syncCrop('bottom',this.value)"><input type="number" class="slider-num-input" id="valBottom" oninput="syncCrop('bottom',this.value)"></div>
+            <div class="slider-row"><span class="slider-label">左</span><input type="range" min="0" value="0" id="cropLeft" oninput="syncCrop('left',this.value)"><input type="number" class="slider-num-input" id="valLeft" oninput="syncCrop('left',this.value)"></div>
+            <div class="slider-row"><span class="slider-label">右</span><input type="range" min="0" value="0" id="cropRight" oninput="syncCrop('right',this.value)"><input type="number" class="slider-num-input" id="valRight" oninput="syncCrop('right',this.value)"></div>
         </div>
 
-        <button class="btn btn-danger" onclick="clearAll()">清空所有图片</button>
-        
-        <div style="margin-top: auto; padding-top:10px; border-top:1px solid #eee;">
-            <button class="btn btn-primary" onclick="downloadImage()">下载合成图片</button>
+        <div class="control-group">
+            <span class="label"><span>间距 & 背景</span> <span class="label-hint" id="spacingHint">(仅调该图下方间距)</span></span>
+            <div class="slider-row"><span style="width:24px">间距</span><input type="range" min="0" max="2000" value="0" id="spacingSlider" oninput="syncSpacing(this.value)"><input type="number" class="slider-num-input" id="spacingVal" oninput="syncSpacing(this.value)"></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;"><span style="font-size:12px;">背景色</span><input type="color" value="#ffffff" id="spacingColor" oninput="queueRenderPreview()"></div>
+        </div>
+
+        <div class="square-buttons">
+            <div class="square-btn" id="saveAllSingleBtn"><span>📸</span><span>保存单张</span></div>
+            <div class="square-btn" id="clearAllBtn"><span>🗑️</span><span>清空所有</span></div>
+        </div>
+        <div style="margin-top: auto; padding-top: 6px;">
+            <button class="square-btn" id="downloadLongBtn" style="width:100%; background:#eef2ff; border-radius: 28px; flex-direction: row; justify-content: center; gap: 8px; padding: 10px;"><span>⬇️</span><span>下载合成长图</span></button>
         </div>
     </div>
+</div>
 
-    <!-- 第二栏：缩略图列表 -->
-    <div class="thumbnail-sidebar">
-        <div class="thumbnail-header">
-            <h4>图片列表 (<span id="imgCount">0</span>)</h4>
-        </div>
-        
-        <div class="thumbnail-list" id="thumbnailList">
-            <div class="empty-thumbnails">请从左侧添加图片</div>
-        </div>
+<div class="thumbnail-sidebar">
+    <div class="thumbnail-header">
+        <h4>图片列表 (<span id="imgCount">0</span>)</h4>
+        <button class="batch-save-icon" id="quickBatchSave">批量存图</button>
     </div>
+    <div class="thumbnail-list" id="thumbnailList"><div class="empty-thumbnails">从左侧添加</div></div>
+</div>
 
-    <!-- 第三栏：预览区域 -->
-    <div class="preview-area">
-        <div class="preview-header">
-            <h4>预览区域 (滚轮缩放，左键拖拽)</h4>
-            <div class="preview-tools">
-                <div class="zoom-controls">
-                    <button class="zoom-btn" onclick="changeZoom(-0.1)">-</button>
-                    <span class="zoom-level" id="zoomLevel">100%</span>
-                    <button class="zoom-btn" onclick="changeZoom(0.1)">+</button>
-                    <button class="zoom-btn" onclick="resetView()" style="font-size:12px;">重置</button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="preview-content" id="previewContent">
-            <div class="preview-container">
-                <!-- Canvas包装器，用于处理交互 -->
-                <div class="canvas-wrapper" id="canvasWrapper">
-                    <canvas id="previewCanvas"></canvas>
-                </div>
+<div class="preview-area">
+    <div class="preview-header">
+        <h4>预览画布 (双击图片快速选中)</h4>
+        <div class="zoom-controls"><button class="zoom-btn" onclick="changeZoom(-0.1)">−</button><span class="zoom-level" id="zoomLevel">100%</span><button class="zoom-btn" onclick="changeZoom(0.1)">+</button><button class="zoom-btn" onclick="resetView()">⟳</button></div>
+    </div>
+    <div class="preview-content">
+        <div class="preview-container" id="previewContainer">
+            <div class="canvas-wrapper" id="canvasWrapper"><canvas id="previewCanvas"></canvas></div>
+            <div id="emptyUploadOverlay" class="empty-upload-overlay" style="display: none;">
+                <div class="big-plus"><span>+</span><div class="plus-text">点击上传图片</div></div>
             </div>
         </div>
     </div>
+</div>
+<div class="zoom-hint" id="zoomHint">滚动缩放</div>
 
-    <!-- 缩放提示 -->
-    <div class="zoom-hint" id="zoomHint">滚轮缩放，左键拖拽</div>
+<script>
+    // ========== 全局变量 ==========
+    let images = [];
+    let globalCrop = { top: 0, bottom: 0, left: 0, right: 0 };
+    let globalSpacing = 0; // 全局统一间距基准值
 
-    <script>
-        // ========== 全局变量 ==========
-        let images = []; 
-        let globalCrop = { top: 0, bottom: 0, left: 0, right: 0 };
-        let currentMode = 'single'; 
-        let selectedIndex = -1;
-        let spacing = 0;
-        
-        // 新增：缩放和拖拽相关变量
-        let zoomLevel = 1.0;
-        let viewportOffset = { x: 0, y: 0 };
-        let isDragging = false;
-        let lastMousePos = { x: 0, y: 0 };
-        let canvasSize = { width: 0, height: 0 }; // canvas原始尺寸
-        let transformMatrix = { x: 0, y: 0, scale: 1 }; // 当前变换
-        
-        // DOM元素
-        const fileInput = document.getElementById('fileInput');
-        const thumbnailList = document.getElementById('thumbnailList');
-        const previewCanvas = document.getElementById('previewCanvas');
-        const canvasWrapper = document.getElementById('canvasWrapper');
-        const zoomHint = document.getElementById('zoomHint');
+    let currentMode = 'single';
+    let selectedIndex = -1;
+    let globalSelectedSet = new Set();
+    
+    let imageHitBoxes = []; 
+    let transformMatrix = { x: 0, y: 0, scale: 1 };
+    let canvasSize = { width: 800, height: 400 };
+    let isDragging = false, lastMousePos = { x: 0, y: 0 };
+    
+    let renderFrame = null; 
+    let pendingReset = false; 
 
-        // ========== 文件上传处理 ==========
-        fileInput.addEventListener('change', async (e) => {
-            if (e.target.files.length === 0) return;
-            
-            const newFiles = Array.from(e.target.files);
-            const loadPromises = newFiles.map(file => {
-                return new Promise((resolve) => {
-                    const img = new Image();
-                    img.src = URL.createObjectURL(file);
-                    img.onload = () => {
-                        resolve({
-                            imgObj: img,
-                            name: file.name,
-                            id: Date.now() + Math.random(),
-                            crop: { top: 0, bottom: 0, left: 0, right: 0 }
-                        });
-                    };
-                });
-            });
-            
-            const newImages = await Promise.all(loadPromises);
-            images = [...images, ...newImages];
-            
-            // 默认选中第一张
-            if (images.length > 0 && selectedIndex === -1) {
-                selectImage(0);
-            }
-            
-            renderThumbnails();
-            renderPreview();
-            
-            fileInput.value = '';
-        });
-        
-        // 拖拽上传支持
-        const uploadArea = document.querySelector('.upload-area');
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'var(--primary)';
-            uploadArea.style.background = '#f0f7ff';
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = '#ddd';
-            uploadArea.style.background = '';
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = '#ddd';
-            uploadArea.style.background = '';
-            
-            if (e.dataTransfer.files.length) {
-                fileInput.files = e.dataTransfer.files;
-                fileInput.dispatchEvent(new Event('change'));
-            }
-        });
+    const previewCanvas = document.getElementById('previewCanvas');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    const zoomHintDiv = document.getElementById('zoomHint');
+    const emptyOverlay = document.getElementById('emptyUploadOverlay');
+    const fileInput = document.getElementById('fileInput');
 
-        // ========== 缩略图列表渲染 ==========
-        function renderThumbnails() {
-            const imgCount = images.length;
-            document.getElementById('imgCount').textContent = imgCount;
+    function showToast(msg) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = msg;
+        container.appendChild(toast);
+        void toast.offsetWidth;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    function updateEmptyOverlay() { emptyOverlay.style.display = images.length === 0 ? 'flex' : 'none'; }
+    
+    function getSingleImageRenderedCanvas(imgItem) {
+        const c = imgItem.crop;
+        const sw = Math.max(1, imgItem.imgObj.width - c.left - c.right);
+        const sh = Math.max(1, imgItem.imgObj.height - c.top - c.bottom);
+        const canvas = document.createElement('canvas');
+        canvas.width = sw; canvas.height = sh;
+        canvas.getContext('2d').drawImage(imgItem.imgObj, c.left, c.top, sw, sh, 0, 0, sw, sh);
+        return canvas;
+    }
+    
+    function saveAllImagesAsSingle() {
+        if (images.length === 0) { showToast("无图片，请先添加"); return; }
+        let count = 0;
+        images.forEach(img => {
+            const canvas = getSingleImageRenderedCanvas(img);
+            const link = document.createElement('a');
+            link.download = `${img.name.split('.')[0]}_裁剪_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            count++;
+        });
+        showToast(`已导出 ${count} 张独立图片`);
+    }
+    
+    function saveSingleImageByIndex(idx) {
+        if (!images[idx]) return;
+        const canvas = getSingleImageRenderedCanvas(images[idx]);
+        const link = document.createElement('a');
+        link.download = `${images[idx].name.split('.')[0]}_单独裁剪.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast("单张图片保存完成");
+    }
+
+    function drawThumbnailCanvas(idx, canvasElement) {
+        if (!canvasElement) return;
+        const item = images[idx];
+        const c = item.crop;
+        const sw = Math.max(1, item.imgObj.width - c.left - c.right);
+        const sh = Math.max(1, item.imgObj.height - c.top - c.bottom);
+        const ctx = canvasElement.getContext('2d');
+        const scale = Math.min(canvasElement.width / sw, canvasElement.height / sh) * 0.8;
+        const dw = sw * scale, dh = sh * scale;
+        
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        ctx.drawImage(item.imgObj, c.left, c.top, sw, sh, (canvasElement.width-dw)/2, (canvasElement.height-dh)/2, dw, dh);
+    }
+
+    function updateSpecificThumbnail(idx) {
+        const itemDiv = document.querySelector(`.thumbnail-item[data-index="${idx}"]`);
+        if (itemDiv) drawThumbnailCanvas(idx, itemDiv.querySelector('.thumb-canvas'));
+    }
+    
+    function handleCropValueChange(side, val) {
+        let isVertical = (side === 'top' || side === 'bottom');
+
+        if (currentMode === 'single' && images[selectedIndex]) {
+            let img = images[selectedIndex].imgObj;
+            let maxAllowed = isVertical ? img.height : img.width;
+            let otherSide = side === 'top' ? 'bottom' : side === 'bottom' ? 'top' : side === 'left' ? 'right' : 'left';
             
-            if (imgCount === 0) {
-                thumbnailList.innerHTML = '<div class="empty-thumbnails">请从左侧添加图片</div>';
-                return;
-            }
+            let otherVal = images[selectedIndex].crop[otherSide];
+            if (val + otherVal >= maxAllowed) val = Math.max(0, maxAllowed - otherVal - 1);
             
-            thumbnailList.innerHTML = '';
-            
-            images.forEach((item, index) => {
-                // 创建拖拽提示线
-                if (index > 0) {
-                    const hint = document.createElement('div');
-                    hint.className = 'drag-hint';
-                    hint.dataset.position = index;
-                    thumbnailList.appendChild(hint);
+            images[selectedIndex].crop[side] = val;
+            updateSpecificThumbnail(selectedIndex);
+
+        } else if (currentMode === 'global') {
+            globalCrop[side] = val;
+            for (let idx of globalSelectedSet) {
+                if (images[idx]) {
+                    let img = images[idx].imgObj;
+                    let maxAllowed = isVertical ? img.height : img.width;
+                    let otherSide = side === 'top' ? 'bottom' : side === 'bottom' ? 'top' : side === 'left' ? 'right' : 'left';
+                    
+                    let specificVal = val;
+                    let otherVal = images[idx].crop[otherSide];
+                    if (specificVal + otherVal >= maxAllowed) specificVal = Math.max(0, maxAllowed - otherVal - 1);
+                    
+                    images[idx].crop[side] = specificVal;
+                    updateSpecificThumbnail(idx);
                 }
-                
-                // 创建缩略图项
-                const itemEl = document.createElement('div');
-                itemEl.className = `thumbnail-item ${index === selectedIndex ? 'selected' : ''}`;
-                itemEl.draggable = true;
-                itemEl.dataset.index = index;
-                
-                // 拖拽事件
-                itemEl.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', index);
-                    itemEl.classList.add('dragging');
-                    document.querySelectorAll('.drag-hint').forEach(hint => hint.classList.add('active'));
-                });
-                
-                itemEl.addEventListener('dragend', () => {
-                    itemEl.classList.remove('dragging');
-                    document.querySelectorAll('.drag-hint').forEach(hint => hint.classList.remove('active'));
-                });
-                
-                itemEl.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                });
-                
-                itemEl.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                    const toIndex = index;
-                    if (fromIndex !== toIndex) moveImage(fromIndex, toIndex);
-                });
-                
-                // 点击选中
-                itemEl.addEventListener('click', (e) => {
-                    if (!e.target.classList.contains('thumbnail-del')) {
-                        selectImage(index);
-                    }
-                });
-                
-                // 计算裁剪后的缩略图
-                const c = item.crop;
-                const t = c.top + globalCrop.top;
-                const b = c.bottom + globalCrop.bottom;
-                const l = c.left + globalCrop.left;
-                const r = c.right + globalCrop.right;
-                
-                const sw = Math.max(1, item.imgObj.width - l - r);
-                const sh = Math.max(1, item.imgObj.height - t - b);
-                
-                // 创建临时canvas绘制裁剪后的缩略图
-                const thumbCanvas = document.createElement('canvas');
-                const thumbCtx = thumbCanvas.getContext('2d');
-                thumbCanvas.width = 140;
-                thumbCanvas.height = 90;
-                
-                // 计算缩略图绘制参数
-                const scale = Math.min(thumbCanvas.width / sw, thumbCanvas.height / sh) * 0.8;
-                const drawWidth = sw * scale;
-                const drawHeight = sh * scale;
-                const offsetX = (thumbCanvas.width - drawWidth) / 2;
-                const offsetY = (thumbCanvas.height - drawHeight) / 2;
-                
-                // 绘制
-                thumbCtx.fillStyle = '#f5f5f5';
-                thumbCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
-                thumbCtx.drawImage(
-                    item.imgObj,
-                    l, t, sw, sh,
-                    offsetX, offsetY, drawWidth, drawHeight
-                );
-                
-                if (t > 0 || b > 0 || l > 0 || r > 0) {
-                    thumbCtx.strokeStyle = 'rgba(255, 153, 0, 0.6)';
-                    thumbCtx.lineWidth = 2;
-                    thumbCtx.strokeRect(offsetX, offsetY, drawWidth, drawHeight);
-                }
-                
-                const thumbDataUrl = thumbCanvas.toDataURL();
-                
-                itemEl.innerHTML = `
-                    <div class="thumbnail-img">
-                        <img src="${thumbDataUrl}" alt="${item.name}">
-                    </div>
-                    <div class="thumbnail-info">
-                        <div class="thumbnail-index">${index + 1}</div>
-                        <div class="thumbnail-name">${item.name.length > 15 ? item.name.substring(0, 12) + '...' : item.name}</div>
-                        <div class="thumbnail-del" onclick="removeImage(${index})">&times;</div>
-                    </div>
-                `;
-                
-                thumbnailList.appendChild(itemEl);
-            });
-        }
-
-        // ========== 图片选择 ==========
-        function selectImage(index) {
-            if (index < 0 || index >= images.length) return;
-            
-            selectedIndex = index;
-            renderThumbnails();
-            
-            if (currentMode === 'single') {
-                updateInputs(images[index].crop);
-                document.getElementById('selectedInfo').textContent = `当前调整: ${images[index].name}`;
-            }
-            
-            const selectedItem = thumbnailList.querySelector(`.thumbnail-item[data-index="${index}"]`);
-            if (selectedItem) {
-                selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
+        
+        let curCrop = currentMode === 'single' ? images[selectedIndex]?.crop : globalCrop;
+        if(curCrop) {
+            document.getElementById(`crop${side.charAt(0).toUpperCase() + side.slice(1)}`).value = curCrop[side];
+            document.getElementById(`val${side.charAt(0).toUpperCase() + side.slice(1)}`).value = curCrop[side];
+        }
 
-        // ========== 模式设置 ==========
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.mode-switch button').forEach(b => {
-                b.classList.toggle('active', b.dataset.mode === mode);
+        queueRenderPreview();
+    }
+    
+    function toggleGlobalSelection(index) {
+        if (currentMode !== 'global') return;
+        globalSelectedSet.has(index) ? globalSelectedSet.delete(index) : globalSelectedSet.add(index);
+        renderThumbnails();
+    }
+    
+    function renderThumbnails() {
+        const container = document.getElementById('thumbnailList');
+        document.getElementById('imgCount').innerText = images.length;
+        if (images.length === 0) {
+            container.innerHTML = '<div class="empty-thumbnails">暂无图片</div>';
+            return;
+        }
+        container.innerHTML = '';
+        images.forEach((item, idx) => {
+            if (idx > 0) {
+                const hint = document.createElement('div'); hint.className = 'drag-hint'; container.appendChild(hint);
+            }
+            const itemDiv = document.createElement('div');
+            itemDiv.className = `thumbnail-item`;
+            if (currentMode === 'single' && selectedIndex === idx) itemDiv.classList.add('selected');
+            else if (currentMode === 'global' && globalSelectedSet.has(idx)) itemDiv.classList.add('global-selected');
+            
+            itemDiv.draggable = true;
+            itemDiv.dataset.index = idx;
+            
+            itemDiv.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', idx); itemDiv.classList.add('dragging'); document.querySelectorAll('.drag-hint').forEach(h => h.classList.add('active')); });
+            itemDiv.addEventListener('dragend', () => { itemDiv.classList.remove('dragging'); document.querySelectorAll('.drag-hint').forEach(h => h.classList.remove('active')); });
+            itemDiv.addEventListener('dragover', e => e.preventDefault());
+            itemDiv.addEventListener('drop', (e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData('text/plain')); if (from !== idx) moveImage(from, idx); });
+            
+            itemDiv.addEventListener('click', (e) => {
+                if (e.target.classList.contains('single-save-btn') || e.target.classList.contains('thumbnail-del')) return;
+                currentMode === 'single' ? selectImage(idx) : toggleGlobalSelection(idx);
             });
+            
+            itemDiv.innerHTML = `
+                <div class="thumbnail-img"><canvas class="thumb-canvas" width="130" height="80"></canvas></div>
+                <div class="thumbnail-info">
+                    <span class="thumbnail-index">${idx+1}</span>
+                    <span class="thumbnail-name" title="${item.name}">${item.name.slice(0,10)}</span>
+                    <button class="single-save-btn" title="保存该图">💾</button>
+                    <span class="thumbnail-del">✕</span>
+                </div>
+            `;
+            itemDiv.querySelector('.single-save-btn').addEventListener('click', (e) => { e.stopPropagation(); saveSingleImageByIndex(idx); });
+            itemDiv.querySelector('.thumbnail-del').addEventListener('click', (e) => { e.stopPropagation(); removeImage(idx); });
+            container.appendChild(itemDiv);
+            
+            drawThumbnailCanvas(idx, itemDiv.querySelector('.thumb-canvas'));
+        });
+        
+        if (currentMode === 'single' && selectedIndex !== -1) {
+            const activeDiv = container.querySelector('.thumbnail-item.selected');
+            if(activeDiv) activeDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+    
+    function selectImage(index) {
+        if (index < 0 || index >= images.length) return;
+        selectedIndex = index;
+        renderThumbnails();
+        updateInputs(images[index].crop);
+        document.getElementById('selectedInfo').innerText = `编辑: ${images[index].name}`;
+        queueRenderPreview();
+    }
+    
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-switch button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        
+        const hintEl = document.getElementById('spacingHint');
 
-            if (mode === 'global') {
-                updateInputs(globalCrop);
-                document.getElementById('selectedInfo').textContent = "模式: 全局统一调整 (所有图片生效)";
+        if (mode === 'global') {
+            hintEl.innerText = "(全局统一所有间距)";
+            globalSelectedSet.clear();
+            for (let i = 0; i < images.length; i++) globalSelectedSet.add(i);
+            
+            // 切换到全局模式时，当前的滑块值即作为全局的基准
+            let currentSliders = {
+                top: parseInt(document.getElementById('cropTop').value) || 0,
+                bottom: parseInt(document.getElementById('cropBottom').value) || 0,
+                left: parseInt(document.getElementById('cropLeft').value) || 0,
+                right: parseInt(document.getElementById('cropRight').value) || 0
+            };
+            globalCrop = { ...currentSliders };
+            globalSpacing = parseInt(document.getElementById('spacingSlider').value) || 0;
+
+            for (let idx of globalSelectedSet) {
+                if (images[idx]) {
+                    images[idx].crop = { ...globalCrop };
+                    images[idx].spacingBottom = globalSpacing;
+                }
+            }
+            
+            updateInputs(globalCrop);
+            document.getElementById('selectedInfo').innerHTML = `🌍 智能模式 | 全选 ${globalSelectedSet.size} 张`;
+            selectedIndex = -1;
+            renderThumbnails();
+            queueRenderPreview();
+        } else {
+            hintEl.innerText = "(仅调该图下方间距)";
+            if (images.length > 0) {
+                if(selectedIndex === -1) selectImage(0); 
+                else selectImage(selectedIndex);
+            } else {
+                document.getElementById('selectedInfo').innerText = "请添加图片";
                 selectedIndex = -1;
                 renderThumbnails();
-            } else {
-                if (images.length > 0) {
-                    selectImage(0);
-                } else {
-                    document.getElementById('selectedInfo').textContent = "请添加并选中图片";
-                }
             }
         }
-
-        // ========== 输入控件更新 (双向绑定核心逻辑) ==========
-        function updateInputs(cropObj) {
-            ['Top','Bottom','Left','Right'].forEach(side => {
-                const key = side.toLowerCase();
-                const val = cropObj[key];
-                // 同时更新滑块和输入框
-                document.getElementById('crop'+side).value = val;
-                document.getElementById('val'+side).value = val;
-            });
+    }
+    
+    // 更新裁剪与间距数值的显示
+    function updateInputs(cropObj) {
+        let maxW = 2000, maxH = 2000;
+        if (currentMode === 'single' && images[selectedIndex]) {
+            maxW = images[selectedIndex].imgObj.width; maxH = images[selectedIndex].imgObj.height;
+        } else if (currentMode === 'global' && globalSelectedSet.size > 0) {
+            let selectedImages = Array.from(globalSelectedSet).map(i => images[i]);
+            maxW = Math.min(...selectedImages.map(img => img.imgObj.width));
+            maxH = Math.min(...selectedImages.map(img => img.imgObj.height));
         }
 
-        // 处理裁剪数值同步
-        function syncCrop(side, value, source) {
-            let val = parseInt(value);
-            if (isNaN(val)) val = 0;
-            if (val < 0) val = 0;
-            if (val > 2000) val = 2000;
+        ['Top','Bottom'].forEach(side => {
+            let k = side.toLowerCase(); let val = cropObj[k]; let el = document.getElementById(`crop${side}`);
+            el.max = maxH; el.value = val; document.getElementById(`val${side}`).value = val;
+        });
+        ['Left','Right'].forEach(side => {
+            let k = side.toLowerCase(); let val = cropObj[k]; let el = document.getElementById(`crop${side}`);
+            el.max = maxW; el.value = val; document.getElementById(`val${side}`).value = val;
+        });
 
-            const sliderId = 'crop' + side.charAt(0).toUpperCase() + side.slice(1);
-            const inputId = 'val' + side.charAt(0).toUpperCase() + side.slice(1);
+        // 单独更新间距显示
+        let currentSpacing = 0;
+        if (currentMode === 'single' && images[selectedIndex]) {
+            currentSpacing = images[selectedIndex].spacingBottom || 0;
+        } else if (currentMode === 'global') {
+            currentSpacing = globalSpacing;
+        }
+        document.getElementById('spacingSlider').value = currentSpacing;
+        document.getElementById('spacingVal').value = currentSpacing;
+    }
+    
+    function syncCrop(side, value) {
+        let val = Math.max(0, parseInt(value)||0);
+        handleCropValueChange(side, val);
+    }
+    
+    // ======== 新增：分离单张和全局的间距同步逻辑 ========
+    function syncSpacing(value) {
+        let val = Math.min(2000, Math.max(0, parseInt(value)||0));
+        document.getElementById('spacingSlider').value = val;
+        document.getElementById('spacingVal').value = val;
 
-            // 根据来源同步另一个控件
-            if (source === 'range') {
-                document.getElementById(inputId).value = val;
-            } else {
-                document.getElementById(sliderId).value = val;
+        if (currentMode === 'single' && images[selectedIndex]) {
+            // 单张模式：只影响当前这张图下方的间距
+            images[selectedIndex].spacingBottom = val;
+        } else if (currentMode === 'global') {
+            // 全局模式：同步所有被选中的图片的下方间距
+            globalSpacing = val;
+            for (let idx of globalSelectedSet) {
+                if (images[idx]) images[idx].spacingBottom = val;
             }
-
-            // 执行实际逻辑
-            handleCropLogic(side.toLowerCase(), val);
         }
-
-        function handleCropLogic(side, val) {
-            if (currentMode === 'global') {
-                globalCrop[side] = val;
-            } else {
-                if (selectedIndex === -1) return;
-                images[selectedIndex].crop[side] = val;
+        queueRenderPreview();
+    }
+    
+    function moveImage(from,to) {
+        if(from===to)return;
+        let item=images.splice(from,1)[0];
+        images.splice(to,0,item);
+        if (currentMode === 'single') {
+            if(selectedIndex===from) selectedIndex=to;
+            else if(selectedIndex>from && selectedIndex<=to) selectedIndex--;
+            else if(selectedIndex<from && selectedIndex>=to) selectedIndex++;
+        } else {
+            let oldSet = new Set(globalSelectedSet); globalSelectedSet.clear();
+            for (let oldIdx of oldSet) {
+                if (oldIdx === from) globalSelectedSet.add(to);
+                else if (oldIdx > from && oldIdx <= to) globalSelectedSet.add(oldIdx-1);
+                else if (oldIdx < from && oldIdx >= to) globalSelectedSet.add(oldIdx+1);
+                else globalSelectedSet.add(oldIdx);
             }
-            
-            renderThumbnails();
-            renderPreview();
         }
-
-        // 处理间距数值同步
-        function syncSpacing(value, source) {
-            let val = parseInt(value);
-            if (isNaN(val)) val = 0;
-            if (val < 0) val = 0;
-            if (val > 2000) val = 2000;
-
-            if (source === 'range') {
-                document.getElementById('spacingVal').value = val;
-            } else {
-                document.getElementById('spacingSlider').value = val;
-            }
-
-            updateSpacingLogic(val);
+        renderThumbnails(); queueRenderPreview();
+    }
+    
+    function removeImage(idx) {
+        images.splice(idx,1);
+        if (currentMode === 'single') {
+            if(selectedIndex>=idx) selectedIndex = Math.max(-1, selectedIndex-1);
+            if(images.length===0) selectedIndex = -1; else if(selectedIndex===-1) selectImage(0);
+        } else {
+            let newSet = new Set();
+            for (let v of globalSelectedSet) { if (v === idx) continue; v > idx ? newSet.add(v-1) : newSet.add(v); }
+            globalSelectedSet = newSet;
+            if (images.length === 0) globalSelectedSet.clear();
         }
+        renderThumbnails(); 
+        queueRenderPreview(images.length === 0);
+        updateEmptyOverlay();
+        showToast("已移除图片");
+    }
+    
+    function clearAll() {
+        images = []; 
+        globalCrop = {top:0,bottom:0,left:0,right:0}; 
+        globalSpacing = 0;
+        selectedIndex = -1; 
+        globalSelectedSet.clear();
 
-        function updateSpacingLogic(val) {
-            spacing = val;
-            renderPreview();
-        }
+        updateInputs(globalCrop); 
+        renderThumbnails(); updateEmptyOverlay();
+        document.getElementById('selectedInfo').innerText = "请添加图片";
+        currentMode === 'global' ? setMode('global') : setMode('single');
+        showToast("已清空所有内容");
+        
+        queueRenderPreview(true);
+    }
+    
+    function queueRenderPreview(shouldResetView = false) {
+        if (shouldResetView) pendingReset = true;
+        if (renderFrame) cancelAnimationFrame(renderFrame);
+        renderFrame = requestAnimationFrame(() => {
+            renderPreview(pendingReset);
+            pendingReset = false;
+        });
+    }
 
+    function renderPreview(shouldResetView = false) {
+        imageHitBoxes = []; 
 
-        // ========== 图片管理 ==========
-        function moveImage(from, to) {
-            if (from === to) return;
-            
-            const item = images.splice(from, 1)[0];
-            images.splice(to, 0, item);
-            
-            if (selectedIndex === from) {
-                selectedIndex = to;
-            } else if (selectedIndex > from && selectedIndex <= to) {
-                selectedIndex--;
-            } else if (selectedIndex < from && selectedIndex >= to) {
-                selectedIndex++;
-            }
-            
-            renderThumbnails();
-            renderPreview();
-        }
-
-        function removeImage(index) {
-            if (!confirm(`确定要删除第${index + 1}张图片吗？`)) return;
-            
-            images.splice(index, 1);
-            
-            if (selectedIndex === index) {
-                selectedIndex = -1;
-                if (images.length > 0) {
-                    selectImage(0);
-                }
-            } else if (selectedIndex > index) {
-                selectedIndex--;
-            }
-            
-            renderThumbnails();
-            renderPreview();
-        }
-
-        function clearAll() {
-            images = [];
-            globalCrop = { top: 0, bottom: 0, left: 0, right: 0 };
-            selectedIndex = -1;
-            updateInputs(globalCrop);
-            renderThumbnails();
-            renderPreview();
-            document.getElementById('selectedInfo').textContent = "请添加并选中图片";
+        if (images.length === 0) {
+            previewCanvas.width=800; previewCanvas.height=400; canvasSize={width:800,height:400};
+            const ctx=previewCanvas.getContext('2d'); ctx.fillStyle='#f5f7fc'; ctx.fillRect(0,0,800,400);
+            updateCanvasDisplay(); 
             resetView();
+            updateEmptyOverlay(); return;
+        }
+        
+        let maxWidth=0;
+        let itemsData = images.map(img => {
+            let c = img.crop; let t = c.top, b = c.bottom, l = c.left, r = c.right;
+            let sw = Math.max(1, img.imgObj.width-l-r), sh = Math.max(1, img.imgObj.height-t-b);
+            if(sw > maxWidth) maxWidth = sw;
+            return { imgObj: img.imgObj, sw, sh, sx: l, sy: t };
+        });
+        
+        // 计算带有各自间距的总高度
+        let totalH = 0;
+        itemsData.forEach((d, i) => { 
+            let rh = d.sh * (maxWidth / d.sw); 
+            totalH += rh; 
+            if (i < itemsData.length - 1) {
+                totalH += (images[i].spacingBottom || 0); // 加上这张图自己定义的底部间距
+            }
+        });
+        
+        canvasSize.width = maxWidth; canvasSize.height = totalH;
+        previewCanvas.width = canvasSize.width; previewCanvas.height = canvasSize.height;
+        let ctx = previewCanvas.getContext('2d');
+        
+        // 不管有没有间距，都直接铺满背景色，防止图片之间露白
+        ctx.fillStyle = document.getElementById('spacingColor').value; 
+        ctx.fillRect(0, 0, maxWidth, totalH); 
+        
+        let curY=0;
+        itemsData.forEach((d, i) => { 
+            let scaleRender = maxWidth / d.sw; 
+            let rh = d.sh * scaleRender; 
+            let rw = d.sw * scaleRender;
+            
+            imageHitBoxes.push({
+                index: i,
+                x0: 0,
+                x1: rw,
+                y0: curY,
+                y1: curY + rh
+            });
+            
+            ctx.drawImage(d.imgObj, d.sx, d.sy, d.sw, d.sh, 0, curY, rw, rh); 
+            
+            ctx.save();
+            ctx.lineWidth = 2;
+            
+            ctx.setLineDash([8, 8]);
+            ctx.strokeStyle = '#ff3b30'; 
+            ctx.strokeRect(1, curY + 1, rw - 2, rh - 2);
+            
+            ctx.lineDashOffset = 8;
+            ctx.strokeStyle = '#ffffff'; 
+            ctx.strokeRect(1, curY + 1, rw - 2, rh - 2);
+            
+            ctx.restore();
+
+            // 往下偏移自身的高度 + 自己专属的间隔
+            let individualSpacing = (i < itemsData.length - 1) ? (images[i].spacingBottom || 0) : 0;
+            curY += rh + individualSpacing; 
+        });
+        
+        updateCanvasDisplay(); 
+        if (shouldResetView) resetView();
+        
+        updateEmptyOverlay();
+    }
+    
+    function updateCanvasDisplay() { previewCanvas.style.transform = `translate(${transformMatrix.x}px, ${transformMatrix.y}px) scale(${transformMatrix.scale})`; document.getElementById('zoomLevel').innerText = Math.round(transformMatrix.scale*100)+'%'; }
+    function resetView() { const container = canvasWrapper.getBoundingClientRect(); if(canvasSize.width===0 || canvasSize.height===0) return; let scale = Math.min(container.width/canvasSize.width, container.height/canvasSize.height)*0.9; transformMatrix.scale = Math.max(0.1, Math.min(5, scale)); transformMatrix.x = (container.width - canvasSize.width*transformMatrix.scale)/2; transformMatrix.y = (container.height - canvasSize.height*transformMatrix.scale)/2; updateCanvasDisplay(); }
+    
+    function handleWheel(e) { e.preventDefault(); let rect=canvasWrapper.getBoundingClientRect(); let mx=e.clientX-rect.left, my=e.clientY-rect.top; let cx=(mx-transformMatrix.x)/transformMatrix.scale, cy=(my-transformMatrix.y)/transformMatrix.scale; let delta=e.deltaY>0?0.95:1.05; let ns=transformMatrix.scale*delta; if(ns<0.1||ns>8) return; transformMatrix.scale=ns; transformMatrix.x=mx-cx*ns; transformMatrix.y=my-cy*ns; updateCanvasDisplay(); showHint(`缩放 ${Math.round(ns*100)}%`); }
+    function startDrag(e){ if(e.button!==0)return; isDragging=true; lastMousePos={x:e.clientX,y:e.clientY}; canvasWrapper.classList.add('dragging'); e.preventDefault(); }
+    function onDrag(e){ if(!isDragging)return; transformMatrix.x+=e.clientX-lastMousePos.x; transformMatrix.y+=e.clientY-lastMousePos.y; lastMousePos={x:e.clientX,y:e.clientY}; updateCanvasDisplay(); }
+    function changeZoom(delta){ let centerX=canvasWrapper.clientWidth/2, centerY=canvasWrapper.clientHeight/2; let cx=(centerX-transformMatrix.x)/transformMatrix.scale, cy=(centerY-transformMatrix.y)/transformMatrix.scale; let ns=transformMatrix.scale+delta; if(ns<0.1||ns>8) return; transformMatrix.scale=ns; transformMatrix.x=centerX-cx*ns; transformMatrix.y=centerY-cy*ns; updateCanvasDisplay(); }
+    function showHint(msg){ zoomHintDiv.innerText=msg; zoomHintDiv.classList.add('show'); clearTimeout(window.hintTm); window.hintTm=setTimeout(()=>zoomHintDiv.classList.remove('show'),1200);}
+    
+    function handleDoubleClick(e) {
+        if (images.length === 0) return;
+        
+        let rect = canvasWrapper.getBoundingClientRect();
+        let mx = e.clientX - rect.left;
+        let my = e.clientY - rect.top;
+
+        let cx = (mx - transformMatrix.x) / transformMatrix.scale;
+        let cy = (my - transformMatrix.y) / transformMatrix.scale;
+
+        let clickedIdx = -1;
+        for (let box of imageHitBoxes) {
+            if (cy >= box.y0 && cy <= box.y1) {
+                clickedIdx = box.index;
+                break;
+            }
         }
 
-        // ========== 预览渲染 ==========
-        function renderPreview() {
-            if (images.length === 0) {
-                previewCanvas.width = 800;
-                previewCanvas.height = 400;
-                canvasSize.width = 800;
-                canvasSize.height = 400;
-                
-                const ctx = previewCanvas.getContext('2d');
-                ctx.fillStyle = '#f8f9fa';
-                ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
-                
-                ctx.font = '16px Arial';
-                ctx.fillStyle = '#999';
-                ctx.textAlign = 'center';
-                ctx.fillText('请添加图片开始合成', previewCanvas.width / 2, previewCanvas.height / 2);
-                
-                updateCanvasDisplay();
-                return;
-            }
+        if (clickedIdx !== -1) {
+            if (currentMode !== 'single') setMode('single');
+            selectImage(clickedIdx);
             
-            let maxWidth = 0;
-            const renderData = images.map((img, idx) => {
-                const c = img.crop;
-                const t = c.top + globalCrop.top;
-                const b = c.bottom + globalCrop.bottom;
-                const l = c.left + globalCrop.left;
-                const r = c.right + globalCrop.right;
+            showToast(`已选中: ${images[clickedIdx].name.slice(0, 15)}`);
+        }
+    }
 
-                const sw = Math.max(1, img.imgObj.width - l - r);
-                const sh = Math.max(1, img.imgObj.height - t - b);
-                
-                if (sw > maxWidth) maxWidth = sw;
+    function downloadLongImage() {
+        if(images.length === 0) { showToast("无图片可保存"); return; }
+        
+        let maxW = 0, items = images.map(img => { 
+            let c = img.crop; 
+            let sw = Math.max(1, img.imgObj.width - c.left - c.right); 
+            let sh = Math.max(1, img.imgObj.height - c.top - c.bottom); 
+            if(sw > maxW) maxW = sw; 
+            return {imgObj: img.imgObj, sw, sh, sx: c.left, sy: c.top}; 
+        });
+        
+        let totalH = 0; 
+        items.forEach((d, i) => { 
+            let rh = d.sh * (maxW / d.sw); 
+            totalH += rh; 
+            if (i < items.length - 1) {
+                totalH += (images[i].spacingBottom || 0); // 加上各自的下方间距
+            }
+        });
+        
+        let exportScale = 1;
+        const MAX_DIMENSION = 16000; 
+        if (totalH > MAX_DIMENSION || maxW > MAX_DIMENSION) {
+            exportScale = Math.min(MAX_DIMENSION / totalH, MAX_DIMENSION / maxW);
+            showToast("图片过长，已自动按比例缩小导出");
+        }
 
-                return { 
-                    ...img, 
-                    index: idx,
-                    sw: sw, 
-                    sh: sh, 
-                    sx: l, 
-                    sy: t 
-                };
-            });
+        let canvas = document.createElement('canvas'); 
+        canvas.width = maxW * exportScale; 
+        canvas.height = totalH * exportScale; 
+        let ctx = canvas.getContext('2d'); 
+        
+        ctx.fillStyle = document.getElementById('spacingColor').value; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height); 
+        
+        let y=0; 
+        items.forEach((d, i) => { 
+            let scale = (maxW / d.sw) * exportScale; 
+            let rh = d.sh * scale; 
+            let rw = d.sw * scale; 
+            
+            ctx.drawImage(d.imgObj, d.sx, d.sy, d.sw, d.sh, 0, y, rw, rh); 
+            
+            let individualSpacing = (i < items.length - 1) ? (images[i].spacingBottom || 0) : 0;
+            y += rh + (individualSpacing * exportScale); 
+        });
+        
+        let a = document.createElement('a'); a.download=`长图_${Date.now()}.jpg`; a.href=canvas.toDataURL('image/jpeg',0.92); a.click();
+        showToast("长图下载完成");
+    }
+    
+    function uploadFiles(files) {
+        if (!files.length) return;
+        let wasEmpty = images.length === 0;
 
-            let totalHeight = 0;
-            renderData.forEach((d) => {
-                d.renderScale = maxWidth / d.sw;
-                d.renderHeight = d.sh * d.renderScale;
-                totalHeight += d.renderHeight;
-                
-                if (d.index < renderData.length - 1) {
-                    totalHeight += spacing;
+        const promises = Array.from(files).map(file => new Promise(resolve => {
+            let img = new Image();
+            img.src = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(img.src); 
+                resolve({ 
+                    imgObj: img, 
+                    name: file.name, 
+                    id: Date.now() + Math.random(), 
+                    crop: { top: 0, bottom: 0, left: 0, right: 0 },
+                    spacingBottom: currentMode === 'global' ? globalSpacing : 0 // 初始化间距
+                });
+            };
+        }));
+        Promise.all(promises).then(newImgs => {
+            images.push(...newImgs);
+            if (currentMode === 'single') {
+                if (selectedIndex === -1 && images.length) selectImage(0);
+                else renderThumbnails();
+            } else if (currentMode === 'global') {
+                for(let i = images.length - newImgs.length; i < images.length; i++) globalSelectedSet.add(i);
+                for(let i = images.length - newImgs.length; i < images.length; i++) {
+                    images[i].crop = { ...globalCrop };
+                    images[i].spacingBottom = globalSpacing;
                 }
-            });
-            
-            canvasSize.width = maxWidth;
-            canvasSize.height = totalHeight;
-            previewCanvas.width = canvasSize.width;
-            previewCanvas.height = canvasSize.height;
-            
-            const ctx = previewCanvas.getContext('2d');
-            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-            
-            if (spacing > 0) {
-                ctx.fillStyle = document.getElementById('spacingColor').value;
-                ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
-            }
-
-            let currentY = 0;
-            renderData.forEach((d) => {
-                const renderHeight = d.sh * d.renderScale;
-                
-                ctx.drawImage(
-                    d.imgObj,
-                    d.sx, d.sy, d.sw, d.sh,
-                    0, currentY, canvasSize.width, renderHeight
-                );
-                currentY += renderHeight + spacing;
-            });
-            
-            updateCanvasDisplay();
-        }
-
-        // ========== 缩放和拖拽功能 ==========
-        function updateCanvasDisplay() {
-            previewCanvas.style.transform = `translate(${transformMatrix.x}px, ${transformMatrix.y}px) scale(${transformMatrix.scale})`;
-            document.getElementById('zoomLevel').textContent = Math.round(transformMatrix.scale * 100) + '%';
-        }
-
-        function handleWheelZoom(e) {
-            e.preventDefault();
-            
-            const rect = canvasWrapper.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            const canvasX = (mouseX - transformMatrix.x) / transformMatrix.scale;
-            const canvasY = (mouseY - transformMatrix.y) / transformMatrix.scale;
-            
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            const newScale = transformMatrix.scale * zoomFactor;
-            
-            const minScale = 0.1;
-            const maxScale = 10;
-            if (newScale < minScale || newScale > maxScale) return;
-            
-            const newX = mouseX - canvasX * newScale;
-            const newY = mouseY - canvasY * newScale;
-            
-            transformMatrix.scale = newScale;
-            transformMatrix.x = newX;
-            transformMatrix.y = newY;
-            
-            updateCanvasDisplay();
-            showZoomHint(`缩放: ${Math.round(newScale * 100)}%`);
-        }
-
-        function startDrag(e) {
-            if (e.button !== 0) return;
-            
-            isDragging = true;
-            lastMousePos.x = e.clientX;
-            lastMousePos.y = e.clientY;
-            
-            canvasWrapper.classList.add('dragging');
-            e.preventDefault();
-        }
-
-        function handleDrag(e) {
-            if (!isDragging) return;
-            
-            const deltaX = e.clientX - lastMousePos.x;
-            const deltaY = e.clientY - lastMousePos.y;
-            
-            transformMatrix.x += deltaX;
-            transformMatrix.y += deltaY;
-            
-            lastMousePos.x = e.clientX;
-            lastMousePos.y = e.clientY;
-            
-            updateCanvasDisplay();
-        }
-
-        function stopDrag() {
-            isDragging = false;
-            canvasWrapper.classList.remove('dragging');
-        }
-
-        function changeZoom(delta) {
-            const container = canvasWrapper.getBoundingClientRect();
-            const centerX = container.width / 2;
-            const centerY = container.height / 2;
-            
-            const canvasX = (centerX - transformMatrix.x) / transformMatrix.scale;
-            const canvasY = (centerY - transformMatrix.y) / transformMatrix.scale;
-            
-            const newScale = transformMatrix.scale + delta;
-            if (newScale < 0.1 || newScale > 10) return;
-            
-            const newX = centerX - canvasX * newScale;
-            const newY = centerY - canvasY * newScale;
-            
-            transformMatrix.scale = newScale;
-            transformMatrix.x = newX;
-            transformMatrix.y = newY;
-            
-            updateCanvasDisplay();
-        }
-
-        function resetView() {
-            const container = canvasWrapper.getBoundingClientRect();
-            const canvasWidth = canvasSize.width;
-            const canvasHeight = canvasSize.height;
-            
-            if (canvasWidth === 0 || canvasHeight === 0) return;
-            
-            const scaleX = container.width / canvasWidth;
-            const scaleY = container.height / canvasHeight;
-            const newScale = Math.min(scaleX, scaleY) * 0.9;
-            
-            const newX = (container.width - canvasWidth * newScale) / 2;
-            const newY = (container.height - canvasHeight * newScale) / 2;
-            
-            transformMatrix.scale = newScale;
-            transformMatrix.x = newX;
-            transformMatrix.y = newY;
-            
-            updateCanvasDisplay();
-            showZoomHint("视图已重置");
-        }
-
-        function showZoomHint(message) {
-            zoomHint.textContent = message;
-            zoomHint.classList.add('show');
-            clearTimeout(zoomHint.timeout);
-            zoomHint.timeout = setTimeout(() => {
-                zoomHint.classList.remove('show');
-            }, 1500);
-        }
-
-        // ========== 事件监听器 ==========
-        function setupInteraction() {
-            canvasWrapper.addEventListener('wheel', handleWheelZoom, { passive: false });
-            canvasWrapper.addEventListener('mousedown', startDrag);
-            document.addEventListener('mousemove', handleDrag);
-            document.addEventListener('mouseup', stopDrag);
-            
-            // 触摸支持
-            canvasWrapper.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 1) {
-                    const touch = e.touches[0];
-                    startDrag({
-                        button: 0,
-                        clientX: touch.clientX,
-                        clientY: touch.clientY,
-                        preventDefault: () => e.preventDefault()
-                    });
-                }
-            }, { passive: false });
-            
-            canvasWrapper.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 1 && isDragging) {
-                    const touch = e.touches[0];
-                    handleDrag({
-                        clientX: touch.clientX,
-                        clientY: touch.clientY
-                    });
-                }
-            }, { passive: false });
-            
-            canvasWrapper.addEventListener('touchend', stopDrag);
-        }
-
-        // ========== 下载功能 ==========
-        function downloadImage() {
-            if (images.length === 0) {
-                alert("请先添加图片");
-                return;
+                renderThumbnails();
             }
             
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            
-            let maxWidth = 0;
-            const renderData = images.map((img) => {
-                const c = img.crop;
-                const t = c.top + globalCrop.top;
-                const b = c.bottom + globalCrop.bottom;
-                const l = c.left + globalCrop.left;
-                const r = c.right + globalCrop.right;
-
-                const sw = Math.max(1, img.imgObj.width - l - r);
-                const sh = Math.max(1, img.imgObj.height - t - b);
-                
-                if (sw > maxWidth) maxWidth = sw;
-
-                return { 
-                    imgObj: img.imgObj,
-                    sw: sw, 
-                    sh: sh, 
-                    sx: l, 
-                    sy: t 
-                };
-            });
-
-            let totalHeight = 0;
-            renderData.forEach((d) => {
-                const renderScale = maxWidth / d.sw;
-                const renderHeight = d.sh * renderScale;
-                totalHeight += renderHeight + spacing;
-            });
-            
-            if (renderData.length > 0) totalHeight -= spacing;
-            
-            tempCanvas.width = maxWidth;
-            tempCanvas.height = totalHeight;
-            
-            if (spacing > 0) {
-                tempCtx.fillStyle = document.getElementById('spacingColor').value;
-                tempCtx.fillRect(0, 0, maxWidth, totalHeight);
-            }
-
-            let currentY = 0;
-            renderData.forEach((d) => {
-                const renderScale = maxWidth / d.sw;
-                const renderHeight = d.sh * renderScale;
-                tempCtx.drawImage(
-                    d.imgObj,
-                    d.sx, d.sy, d.sw, d.sh,
-                    0, currentY, maxWidth, renderHeight
-                );
-                currentY += renderHeight + spacing;
-            });
-            
-            const link = document.createElement('a');
-            const filename = `合成图片_${Date.now()}.jpg`;
-            link.download = filename;
-            link.href = tempCanvas.toDataURL('image/jpeg', 0.92);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        function init() {
-            setupInteraction();
-            renderPreview();
-            setTimeout(resetView, 100);
-        }
-
-        window.addEventListener('load', init);
-        window.addEventListener('resize', () => { setTimeout(resetView, 100); });
-
-    </script>
+            queueRenderPreview(wasEmpty); 
+            showToast(`成功添加 ${newImgs.length} 张图片`);
+        });
+    }
+    
+    fileInput.addEventListener('change', (e) => { if(e.target.files.length) uploadFiles(e.target.files); fileInput.value=''; });
+    document.getElementById('compactUploadBtn').addEventListener('click', () => fileInput.click());
+    emptyOverlay.addEventListener('click', () => fileInput.click());
+    document.getElementById('saveAllSingleBtn').addEventListener('click', saveAllImagesAsSingle);
+    document.getElementById('quickBatchSave').addEventListener('click', saveAllImagesAsSingle);
+    document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+    document.getElementById('downloadLongBtn').addEventListener('click', downloadLongImage);
+    
+    function setupEvents() {
+        canvasWrapper.addEventListener('wheel', handleWheel, { passive: false });
+        canvasWrapper.addEventListener('mousedown', startDrag);
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', () => { isDragging = false; canvasWrapper.classList.remove('dragging'); });
+        canvasWrapper.addEventListener('dblclick', handleDoubleClick);
+    }
+    
+    function init() { setupEvents(); queueRenderPreview(true); updateEmptyOverlay(); setMode('single'); }
+    init();
+</script>
 </body>
 </html>
