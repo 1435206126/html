@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>图片合成编辑器 - 智能全局模式 (优化版)</title>
+    <title>图片合成编辑器 - 智能全局模式 (终极优化版)</title>
     <style>
         * {
             box-sizing: border-box;
@@ -461,7 +461,7 @@
 
 <div class="preview-area">
     <div class="preview-header">
-        <h4>预览画布 (双击图片快速选中)</h4>
+        <h4>预览画布 (拖动四角圆点可精准裁剪)</h4>
         <div class="zoom-controls"><button class="zoom-btn" onclick="changeZoom(-0.1)">−</button><span class="zoom-level" id="zoomLevel">100%</span><button class="zoom-btn" onclick="changeZoom(0.1)">+</button><button class="zoom-btn" onclick="resetView()">⟳</button></div>
     </div>
     <div class="preview-content">
@@ -479,7 +479,7 @@
     // ========== 全局变量 ==========
     let images = [];
     let globalCrop = { top: 0, bottom: 0, left: 0, right: 0 };
-    let globalSpacing = 0; // 全局统一间距基准值
+    let globalSpacing = 0; 
 
     let currentMode = 'single';
     let selectedIndex = -1;
@@ -488,8 +488,17 @@
     let imageHitBoxes = []; 
     let transformMatrix = { x: 0, y: 0, scale: 1 };
     let canvasSize = { width: 800, height: 400 };
-    let isDragging = false, lastMousePos = { x: 0, y: 0 };
     
+    // 拖拽与交互状态
+    let isDragging = false; 
+    let lastMousePos = { x: 0, y: 0 };
+    
+    // 节点裁剪拖拽专用的状态
+    let activeHandle = null; 
+    let dragStartMousePos = { x: 0, y: 0 };
+    let dragStartCrop = { top: 0, bottom: 0, left: 0, right: 0 };
+    let dragStartScale = 1;
+
     let renderFrame = null; 
     let pendingReset = false; 
 
@@ -614,6 +623,7 @@
         if (currentMode !== 'global') return;
         globalSelectedSet.has(index) ? globalSelectedSet.delete(index) : globalSelectedSet.add(index);
         renderThumbnails();
+        queueRenderPreview(); // 刷新高亮手柄
     }
     
     function renderThumbnails() {
@@ -688,7 +698,6 @@
             globalSelectedSet.clear();
             for (let i = 0; i < images.length; i++) globalSelectedSet.add(i);
             
-            // 切换到全局模式时，当前的滑块值即作为全局的基准
             let currentSliders = {
                 top: parseInt(document.getElementById('cropTop').value) || 0,
                 bottom: parseInt(document.getElementById('cropBottom').value) || 0,
@@ -723,7 +732,6 @@
         }
     }
     
-    // 更新裁剪与间距数值的显示
     function updateInputs(cropObj) {
         let maxW = 2000, maxH = 2000;
         if (currentMode === 'single' && images[selectedIndex]) {
@@ -736,14 +744,13 @@
 
         ['Top','Bottom'].forEach(side => {
             let k = side.toLowerCase(); let val = cropObj[k]; let el = document.getElementById(`crop${side}`);
-            el.max = maxH; el.value = val; document.getElementById(`val${side}`).value = val;
+            el.max = maxH; el.value = Math.round(val); document.getElementById(`val${side}`).value = Math.round(val);
         });
         ['Left','Right'].forEach(side => {
             let k = side.toLowerCase(); let val = cropObj[k]; let el = document.getElementById(`crop${side}`);
-            el.max = maxW; el.value = val; document.getElementById(`val${side}`).value = val;
+            el.max = maxW; el.value = Math.round(val); document.getElementById(`val${side}`).value = Math.round(val);
         });
 
-        // 单独更新间距显示
         let currentSpacing = 0;
         if (currentMode === 'single' && images[selectedIndex]) {
             currentSpacing = images[selectedIndex].spacingBottom || 0;
@@ -759,17 +766,14 @@
         handleCropValueChange(side, val);
     }
     
-    // ======== 新增：分离单张和全局的间距同步逻辑 ========
     function syncSpacing(value) {
         let val = Math.min(2000, Math.max(0, parseInt(value)||0));
         document.getElementById('spacingSlider').value = val;
         document.getElementById('spacingVal').value = val;
 
         if (currentMode === 'single' && images[selectedIndex]) {
-            // 单张模式：只影响当前这张图下方的间距
             images[selectedIndex].spacingBottom = val;
         } else if (currentMode === 'global') {
-            // 全局模式：同步所有被选中的图片的下方间距
             globalSpacing = val;
             for (let idx of globalSelectedSet) {
                 if (images[idx]) images[idx].spacingBottom = val;
@@ -830,6 +834,13 @@
         
         queueRenderPreview(true);
     }
+
+    // 帮助函数：判断某张图片当前是否处于选中/激活状态
+    function isImageActive(idx) {
+        if (currentMode === 'single') return selectedIndex === idx;
+        if (currentMode === 'global') return globalSelectedSet.has(idx);
+        return false;
+    }
     
     function queueRenderPreview(shouldResetView = false) {
         if (shouldResetView) pendingReset = true;
@@ -859,21 +870,17 @@
             return { imgObj: img.imgObj, sw, sh, sx: l, sy: t };
         });
         
-        // 计算带有各自间距的总高度
         let totalH = 0;
         itemsData.forEach((d, i) => { 
             let rh = d.sh * (maxWidth / d.sw); 
             totalH += rh; 
-            if (i < itemsData.length - 1) {
-                totalH += (images[i].spacingBottom || 0); // 加上这张图自己定义的底部间距
-            }
+            if (i < itemsData.length - 1) totalH += (images[i].spacingBottom || 0); 
         });
         
         canvasSize.width = maxWidth; canvasSize.height = totalH;
         previewCanvas.width = canvasSize.width; previewCanvas.height = canvasSize.height;
         let ctx = previewCanvas.getContext('2d');
         
-        // 不管有没有间距，都直接铺满背景色，防止图片之间露白
         ctx.fillStyle = document.getElementById('spacingColor').value; 
         ctx.fillRect(0, 0, maxWidth, totalH); 
         
@@ -883,12 +890,19 @@
             let rh = d.sh * scaleRender; 
             let rw = d.sw * scaleRender;
             
+            // 计算四角手柄的逻辑坐标
+            let handles = {
+                tl: { x: 0, y: curY },
+                tr: { x: rw, y: curY },
+                bl: { x: 0, y: curY + rh },
+                br: { x: rw, y: curY + rh }
+            };
+
             imageHitBoxes.push({
                 index: i,
-                x0: 0,
-                x1: rw,
-                y0: curY,
-                y1: curY + rh
+                x0: 0, x1: rw, y0: curY, y1: curY + rh,
+                scaleRender: scaleRender,
+                handles: handles
             });
             
             ctx.drawImage(d.imgObj, d.sx, d.sy, d.sw, d.sh, 0, curY, rw, rh); 
@@ -896,6 +910,7 @@
             ctx.save();
             ctx.lineWidth = 2;
             
+            // 绘制红白虚线
             ctx.setLineDash([8, 8]);
             ctx.strokeStyle = '#ff3b30'; 
             ctx.strokeRect(1, curY + 1, rw - 2, rh - 2);
@@ -903,10 +918,26 @@
             ctx.lineDashOffset = 8;
             ctx.strokeStyle = '#ffffff'; 
             ctx.strokeRect(1, curY + 1, rw - 2, rh - 2);
+
+            // 仅为处于选中状态的图片绘制四个角上的裁剪拖动圆圈手柄
+            if (isImageActive(i)) {
+                // 圆形手柄视觉大小根据缩放动态调整，保证看起来始终是 6px
+                let visualRadius = 6 / transformMatrix.scale;
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#4b6cb7';
+                ctx.lineWidth = 2 / transformMatrix.scale;
+                
+                for (let corner in handles) {
+                    ctx.beginPath();
+                    ctx.arc(handles[corner].x, handles[corner].y, visualRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
             
             ctx.restore();
 
-            // 往下偏移自身的高度 + 自己专属的间隔
             let individualSpacing = (i < itemsData.length - 1) ? (images[i].spacingBottom || 0) : 0;
             curY += rh + individualSpacing; 
         });
@@ -920,9 +951,125 @@
     function updateCanvasDisplay() { previewCanvas.style.transform = `translate(${transformMatrix.x}px, ${transformMatrix.y}px) scale(${transformMatrix.scale})`; document.getElementById('zoomLevel').innerText = Math.round(transformMatrix.scale*100)+'%'; }
     function resetView() { const container = canvasWrapper.getBoundingClientRect(); if(canvasSize.width===0 || canvasSize.height===0) return; let scale = Math.min(container.width/canvasSize.width, container.height/canvasSize.height)*0.9; transformMatrix.scale = Math.max(0.1, Math.min(5, scale)); transformMatrix.x = (container.width - canvasSize.width*transformMatrix.scale)/2; transformMatrix.y = (container.height - canvasSize.height*transformMatrix.scale)/2; updateCanvasDisplay(); }
     
-    function handleWheel(e) { e.preventDefault(); let rect=canvasWrapper.getBoundingClientRect(); let mx=e.clientX-rect.left, my=e.clientY-rect.top; let cx=(mx-transformMatrix.x)/transformMatrix.scale, cy=(my-transformMatrix.y)/transformMatrix.scale; let delta=e.deltaY>0?0.95:1.05; let ns=transformMatrix.scale*delta; if(ns<0.1||ns>8) return; transformMatrix.scale=ns; transformMatrix.x=mx-cx*ns; transformMatrix.y=my-cy*ns; updateCanvasDisplay(); showHint(`缩放 ${Math.round(ns*100)}%`); }
-    function startDrag(e){ if(e.button!==0)return; isDragging=true; lastMousePos={x:e.clientX,y:e.clientY}; canvasWrapper.classList.add('dragging'); e.preventDefault(); }
-    function onDrag(e){ if(!isDragging)return; transformMatrix.x+=e.clientX-lastMousePos.x; transformMatrix.y+=e.clientY-lastMousePos.y; lastMousePos={x:e.clientX,y:e.clientY}; updateCanvasDisplay(); }
+    // ========== 拖拽手柄探测辅助函数 ==========
+    function getHandleAtMouse(cx, cy) {
+        // 让点击判定区域足够大，方便操作 (12px 物理像素感受范围)
+        const hitThreshold = 12 / transformMatrix.scale; 
+        
+        for (let i = imageHitBoxes.length - 1; i >= 0; i--) {
+            let box = imageHitBoxes[i];
+            if (!isImageActive(box.index)) continue; 
+
+            for (let corner in box.handles) {
+                let hx = box.handles[corner].x;
+                let hy = box.handles[corner].y;
+                if (Math.hypot(cx - hx, cy - hy) <= hitThreshold) {
+                    return { index: box.index, corner: corner };
+                }
+            }
+        }
+        return null;
+    }
+
+    // 鼠标悬停时的光标样式更新
+    function updateCursor(e) {
+        if (isDragging || activeHandle) return; // 正在拖动画布或者手柄时，不修改
+        
+        let rect = canvasWrapper.getBoundingClientRect();
+        let mx = e.clientX - rect.left; let my = e.clientY - rect.top;
+        let cx = (mx - transformMatrix.x) / transformMatrix.scale;
+        let cy = (my - transformMatrix.y) / transformMatrix.scale;
+        
+        let handle = getHandleAtMouse(cx, cy);
+        if (handle) {
+            canvasWrapper.style.cursor = (handle.corner === 'tl' || handle.corner === 'br') ? 'nwse-resize' : 'nesw-resize';
+        } else {
+            canvasWrapper.style.cursor = 'grab';
+        }
+    }
+
+    // ========== 核心鼠标事件 (处理手柄拖拽与画布平移) ==========
+    function handleMouseDown(e) {
+        if (e.button !== 0) return;
+        
+        let rect = canvasWrapper.getBoundingClientRect();
+        let mx = e.clientX - rect.left; let my = e.clientY - rect.top;
+        let cx = (mx - transformMatrix.x) / transformMatrix.scale;
+        let cy = (my - transformMatrix.y) / transformMatrix.scale;
+        
+        let handle = getHandleAtMouse(cx, cy);
+        if (handle) {
+            // 点击到手柄：进入裁剪拖拽模式
+            e.preventDefault();
+            activeHandle = handle;
+            
+            // 记录此时鼠标最初的位置以及该图最初始的裁切状态
+            dragStartMousePos = { x: cx, y: cy };
+            dragStartCrop = { ...images[handle.index].crop };
+            let box = imageHitBoxes.find(b => b.index === handle.index);
+            dragStartScale = box ? box.scaleRender : 1;
+
+            // 如果点击的是未选中的图（全局模式下有可能），主动选中它
+            if (currentMode === 'single' && selectedIndex !== handle.index) {
+                selectImage(handle.index);
+            }
+        } else {
+            // 没点到手柄：进入画布平移模式
+            e.preventDefault();
+            isDragging = true; 
+            lastMousePos = { x: e.clientX, y: e.clientY }; 
+            canvasWrapper.classList.add('dragging'); 
+        }
+    }
+
+    function handleMouseMove(e) {
+        updateCursor(e);
+
+        if (activeHandle) {
+            // 我们正在拖动裁剪手柄
+            let rect = canvasWrapper.getBoundingClientRect();
+            let mx = e.clientX - rect.left; let my = e.clientY - rect.top;
+            let cx = (mx - transformMatrix.x) / transformMatrix.scale;
+            let cy = (my - transformMatrix.y) / transformMatrix.scale;
+            
+            // 计算由于鼠标产生的逻辑偏移
+            let dx = cx - dragStartMousePos.x;
+            let dy = cy - dragStartMousePos.y;
+            
+            // 将画布缩放比例换算为图片真实的像素变化值
+            let ndx = dx / dragStartScale;
+            let ndy = dy / dragStartScale;
+            
+            // 计算新的裁切绝对值
+            if (activeHandle.corner.includes('l')) syncCrop('left', dragStartCrop.left + ndx);
+            if (activeHandle.corner.includes('r')) syncCrop('right', dragStartCrop.right - ndx);
+            if (activeHandle.corner.includes('t')) syncCrop('top', dragStartCrop.top + ndy);
+            if (activeHandle.corner.includes('b')) syncCrop('bottom', dragStartCrop.bottom - ndy);
+            
+            return;
+        }
+
+        if (isDragging) {
+            // 画布平移
+            transformMatrix.x += e.clientX - lastMousePos.x; 
+            transformMatrix.y += e.clientY - lastMousePos.y; 
+            lastMousePos = { x: e.clientX, y: e.clientY }; 
+            updateCanvasDisplay();
+        }
+    }
+
+    function handleMouseUp() {
+        if (activeHandle) {
+            activeHandle = null;
+        }
+        if (isDragging) {
+            isDragging = false; 
+            canvasWrapper.classList.remove('dragging');
+        }
+    }
+    
+    function handleWheel(e) { e.preventDefault(); let rect=canvasWrapper.getBoundingClientRect(); let mx=e.clientX-rect.left, my=e.clientY-rect.top; let cx=(mx-transformMatrix.x)/transformMatrix.scale, cy=(my-transformMatrix.y)/transformMatrix.scale; let delta=e.deltaY>0?0.95:1.05; let ns=transformMatrix.scale*delta; if(ns<0.1||ns>8) return; transformMatrix.scale=ns; transformMatrix.x=mx-cx*ns; transformMatrix.y=my-cy*ns; updateCanvasDisplay(); showHint(`缩放 ${Math.round(ns*100)}%`); updateCursor(e); }
+    
     function changeZoom(delta){ let centerX=canvasWrapper.clientWidth/2, centerY=canvasWrapper.clientHeight/2; let cx=(centerX-transformMatrix.x)/transformMatrix.scale, cy=(centerY-transformMatrix.y)/transformMatrix.scale; let ns=transformMatrix.scale+delta; if(ns<0.1||ns>8) return; transformMatrix.scale=ns; transformMatrix.x=centerX-cx*ns; transformMatrix.y=centerY-cy*ns; updateCanvasDisplay(); }
     function showHint(msg){ zoomHintDiv.innerText=msg; zoomHintDiv.classList.add('show'); clearTimeout(window.hintTm); window.hintTm=setTimeout(()=>zoomHintDiv.classList.remove('show'),1200);}
     
@@ -930,9 +1077,7 @@
         if (images.length === 0) return;
         
         let rect = canvasWrapper.getBoundingClientRect();
-        let mx = e.clientX - rect.left;
-        let my = e.clientY - rect.top;
-
+        let mx = e.clientX - rect.left; let my = e.clientY - rect.top;
         let cx = (mx - transformMatrix.x) / transformMatrix.scale;
         let cy = (my - transformMatrix.y) / transformMatrix.scale;
 
@@ -947,7 +1092,6 @@
         if (clickedIdx !== -1) {
             if (currentMode !== 'single') setMode('single');
             selectImage(clickedIdx);
-            
             showToast(`已选中: ${images[clickedIdx].name.slice(0, 15)}`);
         }
     }
@@ -967,9 +1111,7 @@
         items.forEach((d, i) => { 
             let rh = d.sh * (maxW / d.sw); 
             totalH += rh; 
-            if (i < items.length - 1) {
-                totalH += (images[i].spacingBottom || 0); // 加上各自的下方间距
-            }
+            if (i < items.length - 1) totalH += (images[i].spacingBottom || 0); 
         });
         
         let exportScale = 1;
@@ -1017,7 +1159,7 @@
                     name: file.name, 
                     id: Date.now() + Math.random(), 
                     crop: { top: 0, bottom: 0, left: 0, right: 0 },
-                    spacingBottom: currentMode === 'global' ? globalSpacing : 0 // 初始化间距
+                    spacingBottom: currentMode === 'global' ? globalSpacing : 0
                 });
             };
         }));
@@ -1050,9 +1192,9 @@
     
     function setupEvents() {
         canvasWrapper.addEventListener('wheel', handleWheel, { passive: false });
-        canvasWrapper.addEventListener('mousedown', startDrag);
-        document.addEventListener('mousemove', onDrag);
-        document.addEventListener('mouseup', () => { isDragging = false; canvasWrapper.classList.remove('dragging'); });
+        canvasWrapper.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
         canvasWrapper.addEventListener('dblclick', handleDoubleClick);
     }
     
