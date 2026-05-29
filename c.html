@@ -1197,6 +1197,20 @@
         document.addEventListener('mouseup', handleMouseUp);
         canvasWrapper.addEventListener('dblclick', handleDoubleClick);
     }
+
+    // ========== 全局拖拽上传 ==========
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            uploadFiles(e.dataTransfer.files);
+        }
+    });
     
     function init() { setupEvents(); queueRenderPreview(true); updateEmptyOverlay(); setMode('single'); }
     init();
