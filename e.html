@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频截图拼接工具 - 自由选区版</title>
+    <title>视频截图拼接工具 - 长图漫游版</title>
     <style>
         :root {
             --primary: #007bff;
@@ -18,16 +18,33 @@
         .header h1 { font-size: 22px; color: #333; margin-bottom: 5px; }
         .hint { color: #666; font-size: 13px; }
         
-        .main-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; max-width: 1400px; margin: 0 auto; width: 100%; }
+        /* 布局分屏：左右等分 flex: 1 */
+        .main-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; max-width: 1600px; margin: 0 auto; width: 100%; }
         
         /* 左侧视频区 */
         .video-panel {
-            flex: 2; display: flex; flex-direction: column; gap: 10px;
+            flex: 1; display: flex; flex-direction: column; gap: 10px;
             background: var(--panel-bg); padding: 15px; border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05); min-width: 0;
         }
-        
-        .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+        /* 顶部功能区：正方形按钮和工具栏 */
+        .top-controls { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 5px; }
+        .square-btns { display: flex; gap: 10px; }
+        .square-btn {
+            width: 65px; height: 65px; border-radius: 8px; border: none; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: 0.2s; gap: 4px;
+            color: #333; flex-shrink: 0;
+        }
+        .square-btn:hover { transform: translateY(-3px); box-shadow: 0 5px 12px rgba(0,0,0,0.15); }
+        .square-btn.btn-primary { background: var(--primary); color: white; }
+        .square-btn.btn-success { background: #28a745; color: white; }
+        .square-btn.btn-orange { background: #fd7e14; color: white; }
+        .square-btn .icon { font-size: 22px; }
+        .square-btn .text { font-size: 12px; font-weight: bold; }
+
+        .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #f8f9fa; padding: 10px 15px; border-radius: 8px; flex: 1; }
         .file-btn { position: relative; overflow: hidden; }
         .file-btn input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
         
@@ -36,10 +53,7 @@
             border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.2s;
             display: flex; align-items: center; gap: 5px;
         }
-        .btn:hover { background: #f0f0f0; }
-        .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
-        .btn-success { background: #28a745; color: white; border: none; }
-        .btn-orange { background: #fd7e14; color: white; border: none; }
+        .btn:hover { background: #e2e2e2; }
         .btn-danger { background: #dc3545; color: white; border: none; }
 
         .fps-wrapper { display: flex; align-items: center; gap: 5px; font-size: 13px; background: #eee; padding: 5px 10px; border-radius: 4px; }
@@ -49,64 +63,80 @@
         .video-wrapper {
             flex: 1; background: #000; position: relative;
             display: flex; align-items: center; justify-content: center;
-            overflow: hidden; border-radius: 4px;
-            user-select: none;
+            overflow: hidden; border-radius: 4px; user-select: none;
         }
         video { max-width: 100%; max-height: 100%; display: block; pointer-events: none; }
         
-        /* 选区覆盖层 */
+        /* 选区框 */
         .overlay-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        
-        /* 选区框 - 恢复拖拽样式 */
         .selection-box {
-            position: absolute;
-            border: 2px solid #ff3b30;
-            background: rgba(255, 59, 48, 0.1);
-            pointer-events: auto;
-            cursor: move;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); /* 遮罩效果 */
-            z-index: 10;
+            position: absolute; border: 2px solid #ff3b30; background: rgba(255, 59, 48, 0.1);
+            pointer-events: auto; cursor: move; box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); z-index: 10;
         }
-
-        /* 恢复手柄 */
         .handle { position: absolute; width: 10px; height: 10px; background: white; border: 1px solid #ff3b30; z-index: 11; }
-        .h-nw { top: -6px; left: -6px; cursor: nw-resize; }
-        .h-n  { top: -6px; left: 50%; margin-left: -5px; cursor: n-resize; }
-        .h-ne { top: -6px; right: -6px; cursor: ne-resize; }
-        .h-w  { top: 50%; left: -6px; margin-top: -5px; cursor: w-resize; }
-        .h-e  { top: 50%; right: -6px; margin-top: -5px; cursor: e-resize; }
-        .h-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
-        .h-s  { bottom: -6px; left: 50%; margin-left: -5px; cursor: s-resize; }
-        .h-se { bottom: -6px; right: -6px; cursor: se-resize; }
+        .h-nw { top: -6px; left: -6px; cursor: nw-resize; } .h-n  { top: -6px; left: 50%; margin-left: -5px; cursor: n-resize; }
+        .h-ne { top: -6px; right: -6px; cursor: ne-resize; } .h-w  { top: 50%; left: -6px; margin-top: -5px; cursor: w-resize; }
+        .h-e  { top: 50%; right: -6px; margin-top: -5px; cursor: e-resize; } .h-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+        .h-s  { bottom: -6px; left: 50%; margin-left: -5px; cursor: s-resize; } .h-se { bottom: -6px; right: -6px; cursor: se-resize; }
 
-        /* 进度条 */
+        /* 进度条与帧控制 */
         .progress-area { display: flex; align-items: center; gap: 10px; font-size: 12px; font-family: monospace; position: relative; }
         .progress-bar { flex: 1; height: 8px; background: #ddd; border-radius: 4px; cursor: pointer; position: relative; }
         .progress-fill { height: 100%; background: var(--primary); width: 0%; border-radius: 4px; }
-        .wheel-hint { position: absolute; right: -25px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #666; background: #f0f0f0; padding: 2px 5px; border-radius: 3px; border: 1px solid #ddd; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
-        .progress-area:hover .wheel-hint { opacity: 1; }
-
-        /* 帧控制区 */
+        
         .frame-controls { display: flex; justify-content: center; gap: 15px; padding: 8px; background: #f8f9fa; border-radius: 6px; border: 1px solid #eee; flex-wrap: wrap; }
         .frame-group { display: flex; align-items: center; gap: 2px; }
         .frame-group span { font-size: 12px; color: #666; margin-right: 4px; }
         .mini-btn { width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer;}
         .custom-step-input { width: 40px; text-align: center; border: 1px solid var(--primary); border-radius: 3px; color: var(--primary); font-weight: bold; height: 28px; margin: 0 2px; }
 
-        /* 右侧侧边栏 */
-        .sidebar { flex: 1; background: var(--panel-bg); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); min-width: 300px; max-width: 350px; }
-        .panel-section { border-bottom: 1px solid #eee; padding-bottom: 15px; }
-        .panel-title { font-weight: bold; font-size: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; }
-        
-        .shot-list { flex: 1; overflow-y: auto; background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 10px; align-content: start; }
-        .shot-item { position: relative; border: 2px solid transparent; cursor: pointer; transition: 0.2s; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .shot-item:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0,0,0,0.1); border-color: var(--primary); }
-        .shot-item.dragging { opacity: 0.4; }
-        .shot-item img { width: 100%; height: auto; display: block; pointer-events: none;}
-        .shot-del { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; background: red; color: white; border-radius: 50%; text-align: center; line-height: 16px; font-size: 12px; cursor: pointer; display: none; z-index: 5; }
-        .shot-item:hover .shot-del { display: block; }
+        /* 右侧漫游长图预览区 */
+        .preview-panel {
+            flex: 1; display: flex; flex-direction: column; background: var(--panel-bg);
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); overflow: hidden;
+        }
+        .preview-header {
+            padding: 12px 15px; border-bottom: 1px solid #eee; font-weight: bold;
+            display: flex; justify-content: space-between; align-items: center; background: #fff; z-index: 10;
+        }
+        .preview-viewport {
+            flex: 1; background: #2c2c2c; position: relative; overflow: hidden; cursor: grab;
+        }
+        .preview-viewport:active { cursor: grabbing; }
+        /* 背景网格底纹 */
+        .preview-viewport::before {
+            content: ""; position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; opacity: 0.3;
+            background-image: linear-gradient(45deg, #1a1a1a 25%, transparent 25%, transparent 75%, #1a1a1a 75%, #1a1a1a), linear-gradient(45deg, #1a1a1a 25%, transparent 25%, transparent 75%, #1a1a1a 75%, #1a1a1a);
+            background-size: 20px 20px; background-position: 0 0, 10px 10px;
+        }
+        .preview-canvas {
+            transform-origin: 0 0; display: flex; flex-direction: column; align-items: center;
+            position: absolute; left: 0; top: 0; min-width: 100%; will-change: transform;
+        }
 
-        /* 图片预览 */
+        /* 每一帧截图 */
+        .shot-item {
+            position: relative; display: block; box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            background: #fff; margin: 0; /* margin 0 模拟长图无缝拼接 */
+        }
+        .shot-item.dragging { opacity: 0.5; }
+        .shot-item img { display: block; max-width: 100%; pointer-events: none; }
+        
+        /* 拖拽手柄与删除按钮 */
+        .drag-handle {
+            position: absolute; top: 10px; left: 10px; width: 36px; height: 36px;
+            background: rgba(0,0,0,0.6); color: #fff; display: flex; align-items: center; justify-content: center;
+            cursor: grab; border-radius: 6px; font-size: 18px; opacity: 0; transition: 0.2s; z-index: 5;
+        }
+        .drag-handle:active { cursor: grabbing; }
+        .shot-del {
+            position: absolute; top: 10px; right: 10px; width: 36px; height: 36px;
+            background: rgba(255, 59, 48, 0.9); color: white; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; border-radius: 50%; font-size: 24px; opacity: 0; transition: 0.2s; z-index: 5; line-height: 1;
+        }
+        .shot-item:hover .drag-handle, .shot-item:hover .shot-del { opacity: 1; }
+
+        /* 图片预览弹窗 */
         .image-viewer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
         .image-viewer img { max-width: 95%; max-height: 95%; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
 
@@ -118,30 +148,44 @@
 
 <div class="header">
     <h1>视频截图拼接工具</h1>
-    <div class="hint">鼠标右键/空格: 截图 | 回车: 合成长图 | Ctrl+回车: 分别保存单图 | 选框可自由拖拽拉伸</div>
+    <div class="hint">鼠标右键/空格: 截图 | 回车: 合成长图 | Ctrl+回车: 分别保存单图 | 选框可自由拖拽拉伸 | 预览区鼠标拖拽平移，滚轮缩放</div>
 </div>
 
 <div class="main-layout">
+    <!-- 左侧区域 -->
     <div class="video-panel">
-        <div class="toolbar">
-            <button class="btn file-btn">📂 打开视频<input type="file" id="videoInput" accept="video/*"></button>
-            <div class="fps-wrapper"><label>帧率:</label><input type="number" id="fpsInput" value="30" min="1"></div>
-            <button class="btn btn-danger" id="clearAllBtn">清空列表</button>
-            <span id="statusText" style="font-size:12px; color:#666; margin-left:auto;">等待载入...</span>
+        <div class="top-controls">
+            <div class="square-btns">
+                <button class="square-btn btn-success" id="captureBtn" title="快捷键: 鼠标右键 / 空格">
+                    <span class="icon">📸</span><span class="text">截图</span>
+                </button>
+                <button class="square-btn btn-primary" id="downloadBtn" title="快捷键: 回车键">
+                    <span class="icon">💾</span><span class="text">长图</span>
+                </button>
+                <button class="square-btn btn-orange" id="saveMultiBtn" title="快捷键: Ctrl + 回车键">
+                    <span class="icon">📦</span><span class="text">单图</span>
+                </button>
+                <button class="square-btn" onclick="resetToFull()" title="将选区恢复为视频全画面">
+                    <span class="icon">🔲</span><span class="text">铺满</span>
+                </button>
+            </div>
+            
+            <div class="toolbar">
+                <button class="btn file-btn">📂 打开视频<input type="file" id="videoInput" accept="video/*"></button>
+                <div class="fps-wrapper"><label>帧率:</label><input type="number" id="fpsInput" value="30" min="1"></div>
+                <button class="btn btn-danger" id="clearAllBtn">清空全部</button>
+                <span id="statusText" style="font-size:12px; color:#666; margin-left:auto;">等待载入...</span>
+            </div>
         </div>
 
         <div class="video-wrapper" id="videoContainer">
             <video id="videoPlayer"></video>
             <div class="overlay-layer">
                 <div class="selection-box" id="selectionBox" style="display:none;">
-                    <div class="handle h-nw" data-dir="nw"></div>
-                    <div class="handle h-n"  data-dir="n"></div>
-                    <div class="handle h-ne" data-dir="ne"></div>
-                    <div class="handle h-w"  data-dir="w"></div>
-                    <div class="handle h-e"  data-dir="e"></div>
-                    <div class="handle h-sw" data-dir="sw"></div>
-                    <div class="handle h-s"  data-dir="s"></div>
-                    <div class="handle h-se" data-dir="se"></div>
+                    <div class="handle h-nw" data-dir="nw"></div><div class="handle h-n"  data-dir="n"></div>
+                    <div class="handle h-ne" data-dir="ne"></div><div class="handle h-w"  data-dir="w"></div>
+                    <div class="handle h-e"  data-dir="e"></div><div class="handle h-sw" data-dir="sw"></div>
+                    <div class="handle h-s"  data-dir="s"></div><div class="handle h-se" data-dir="se"></div>
                 </div>
             </div>
         </div>
@@ -150,7 +194,6 @@
             <span id="currTime">00:00</span>
             <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
             <span id="totalTime">00:00</span>
-            <div class="wheel-hint">滚轮控制进度</div>
         </div>
 
         <div class="frame-controls">
@@ -165,17 +208,19 @@
         </div>
     </div>
 
-    <div class="sidebar">
-        <div class="panel-section">
-            <button class="btn btn-success" id="captureBtn" style="width:100%; height:45px; font-size:15px; margin-bottom:10px;">📸 截图 (右键/空格)</button>
-            <button class="btn btn-primary" id="downloadBtn" style="width:100%; height:40px; font-size:14px; margin-bottom:10px;">💾 合并成长图 (回车)</button>
-            <button class="btn btn-orange" id="saveMultiBtn" style="width:100%; height:40px; font-size:14px;">📦 批量保存单图 (Ctrl+回车)</button>
-            <button class="btn" onclick="resetToFull()" style="width:100%; margin-top:10px; font-size:12px;">自动铺满全屏</button>
+    <!-- 右侧区域 -->
+    <div class="preview-panel">
+        <div class="preview-header">
+            <span>🎨 实时长图拼接预览</span>
+            <span id="shotCount" style="color:var(--primary);">已截图: 0 张</span>
         </div>
-
-        <div class="panel-title">截图队列 <span id="shotCount" style="color:var(--primary)">(0)</span></div>
-        <div class="shot-list" id="shotList">
-            <div style="text-align:center; color:#999; padding:20px; grid-column:1/-1;">暂无截图</div>
+        <div class="preview-viewport" id="previewViewport">
+            <!-- canvas 容器，利用 transform 实现无损缩放和平移 -->
+            <div class="preview-canvas" id="shotList">
+                <div id="emptyHint" style="color:#aaa; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none; font-size: 14px;">
+                    暂无截图，在左侧截图后将在此处实时拼接预览长图
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -185,16 +230,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // ======== 核心状态与元素声明 ========
     const state = {
-        fps: 30,
-        videoUrl: null,
-        rect: { x: 0, y: 0, w: 0, h: 0 }, // 存储相对于视频显示区域的坐标
+        fps: 30, videoUrl: null,
+        rect: { x: 0, y: 0, w: 0, h: 0 },
         screenshots: [],
         videoMetrics: { displayW: 0, displayH: 0, offsetX: 0, offsetY: 0 },
-        isDragging: false,
-        dragAction: null,
-        dragStart: { x: 0, y: 0 },
-        rectStart: { x: 0, y: 0, w: 0, h: 0 }
+        isDragging: false, dragAction: null,
+        dragStart: { x: 0, y: 0 }, rectStart: { x: 0, y: 0, w: 0, h: 0 }
+    };
+
+    // 预览画布状态
+    const previewState = {
+        scale: 1, translateX: 0, translateY: 0,
+        isPanning: false, startX: 0, startY: 0,
+        clickStartX: 0, clickStartY: 0
     };
 
     const els = {
@@ -202,16 +252,18 @@ document.addEventListener('DOMContentLoaded', () => {
         videoContainer: document.getElementById('videoContainer'),
         fileInput: document.getElementById('videoInput'),
         selBox: document.getElementById('selectionBox'),
-        shotList: document.getElementById('shotList'),
+        shotList: document.getElementById('shotList'), // 也就是 preview-canvas
         fpsInput: document.getElementById('fpsInput'),
         customStepInput: document.getElementById('customStepInput'),
-        progressBar: document.getElementById('progressBar'),
         progressFill: document.getElementById('progressFill'),
         imageViewer: document.getElementById('imageViewer'),
-        viewerImg: document.getElementById('viewerImg')
+        viewerImg: document.getElementById('viewerImg'),
+        toast: document.getElementById('toast'),
+        viewport: document.getElementById('previewViewport'),
+        emptyHint: document.getElementById('emptyHint')
     };
 
-    // --- 1. 视频加载 ---
+    // ======== 1. 视频加载与自适应逻辑 ========
     els.fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -220,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         els.video.src = state.videoUrl;
         els.video.onloadedmetadata = () => {
             updateVideoMetrics();
-            resetToFull(); // 默认铺满
+            resetToFull(); 
             showToast("视频已加载");
             document.getElementById('statusText').innerText = file.name;
         };
@@ -245,7 +297,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 默认铺满逻辑
     window.resetToFull = () => {
         state.rect = { x: 0, y: 0, w: state.videoMetrics.displayW, h: state.videoMetrics.displayH };
         renderSelection();
@@ -259,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
         els.selBox.style.height = `${state.rect.h}px`;
     }
 
-    // --- 2. 选区拖拽拉伸逻辑 (关键找回) ---
+    // ======== 2. 选区拖拽调整逻辑 ========
     els.selBox.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         state.isDragging = true;
@@ -269,39 +320,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('mousemove', (e) => {
-        if (!state.isDragging) return;
-        const dx = e.clientX - state.dragStart.x;
-        const dy = e.clientY - state.dragStart.y;
-        const s = state.rectStart;
-        const limitW = state.videoMetrics.displayW;
-        const limitH = state.videoMetrics.displayH;
+        if (state.isDragging) {
+            const dx = e.clientX - state.dragStart.x;
+            const dy = e.clientY - state.dragStart.y;
+            const s = state.rectStart;
+            const limitW = state.videoMetrics.displayW, limitH = state.videoMetrics.displayH;
 
-        let n = { ...state.rect };
-        if (state.dragAction === 'move') {
-            n.x = Math.max(0, Math.min(s.x + dx, limitW - s.w));
-            n.y = Math.max(0, Math.min(s.y + dy, limitH - s.h));
-        } else {
-            const dir = state.dragAction;
-            if (dir.includes('e')) n.w = Math.min(Math.max(20, s.w + dx), limitW - s.x);
-            if (dir.includes('s')) n.h = Math.min(Math.max(20, s.h + dy), limitH - s.y);
-            if (dir.includes('w')) {
-                const actualDx = Math.min(dx, s.w - 20);
-                n.x = Math.max(0, s.x + actualDx);
-                n.w = s.w - (n.x - s.x);
+            let n = { ...state.rect };
+            if (state.dragAction === 'move') {
+                n.x = Math.max(0, Math.min(s.x + dx, limitW - s.w));
+                n.y = Math.max(0, Math.min(s.y + dy, limitH - s.h));
+            } else {
+                const dir = state.dragAction;
+                if (dir.includes('e')) n.w = Math.min(Math.max(20, s.w + dx), limitW - s.x);
+                if (dir.includes('s')) n.h = Math.min(Math.max(20, s.h + dy), limitH - s.y);
+                if (dir.includes('w')) {
+                    const actualDx = Math.min(dx, s.w - 20);
+                    n.x = Math.max(0, s.x + actualDx);
+                    n.w = s.w - (n.x - s.x);
+                }
+                if (dir.includes('n')) {
+                    const actualDy = Math.min(dy, s.h - 20);
+                    n.y = Math.max(0, s.y + actualDy);
+                    n.h = s.h - (n.y - s.y);
+                }
             }
-            if (dir.includes('n')) {
-                const actualDy = Math.min(dy, s.h - 20);
-                n.y = Math.max(0, s.y + actualDy);
-                n.h = s.h - (n.y - s.y);
-            }
+            state.rect = n;
+            renderSelection();
         }
-        state.rect = n;
-        renderSelection();
+
+        // 画布平移逻辑
+        if (previewState.isPanning) {
+            previewState.translateX = e.clientX - previewState.startX;
+            previewState.translateY = e.clientY - previewState.startY;
+            updateTransform();
+        }
     });
 
-    window.addEventListener('mouseup', () => state.isDragging = false);
+    window.addEventListener('mouseup', () => {
+        state.isDragging = false;
+        if (previewState.isPanning) {
+            previewState.isPanning = false;
+            els.viewport.style.cursor = 'grab';
+        }
+    });
 
-    // --- 3. 截图功能 ---
+
+    // ======== 3. 截图核心与自动居中逻辑 ========
     window.addEventListener('contextmenu', (e) => { e.preventDefault(); capture(); });
     document.getElementById('captureBtn').onclick = capture;
 
@@ -318,40 +383,146 @@ document.addEventListener('DOMContentLoaded', () => {
         
         state.screenshots.push({ id: Date.now(), dataUrl: canvas.toDataURL('image/jpeg', 0.95) });
         renderShotList();
-        showToast("已截图");
+        showToast("已截图，将在右侧居中显示");
+        focusOnLatestShot(); // 聚焦动画
     }
 
+    // ======== 4. 预览画布漫游与渲染逻辑 ========
+    function updateTransform() {
+        els.shotList.style.transform = `translate(${previewState.translateX}px, ${previewState.translateY}px) scale(${previewState.scale})`;
+    }
+
+    // 缩放
+    els.viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (state.screenshots.length === 0) return;
+
+        const rect = els.viewport.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const zoomIntensity = 0.1;
+        const delta = e.deltaY > 0 ? -1 : 1;
+        let newScale = previewState.scale * Math.exp(delta * zoomIntensity);
+        newScale = Math.max(0.1, Math.min(newScale, 5)); // 限制缩放级别
+
+        previewState.translateX = mouseX - (mouseX - previewState.translateX) * (newScale / previewState.scale);
+        previewState.translateY = mouseY - (mouseY - previewState.translateY) * (newScale / previewState.scale);
+        previewState.scale = newScale;
+        
+        updateTransform();
+    }, {passive: false});
+
+    // 平移
+    els.viewport.addEventListener('mousedown', (e) => {
+        if(e.target.closest('.drag-handle') || e.target.closest('.shot-del')) return;
+        e.preventDefault(); // 防止误触发图片原生拖拽
+        if (state.screenshots.length === 0) return;
+
+        previewState.isPanning = true;
+        previewState.startX = e.clientX - previewState.translateX;
+        previewState.startY = e.clientY - previewState.translateY;
+        previewState.clickStartX = e.clientX;
+        previewState.clickStartY = e.clientY;
+        els.viewport.style.cursor = 'grabbing';
+    });
+
     function renderShotList() {
-        document.getElementById('shotCount').innerText = `(${state.screenshots.length})`;
-        els.shotList.innerHTML = '';
+        document.getElementById('shotCount').innerText = `已截图: ${state.screenshots.length} 张`;
+        
+        Array.from(els.shotList.children).forEach(child => {
+            if (child.id !== 'emptyHint') els.shotList.removeChild(child);
+        });
+
+        if(state.screenshots.length === 0) {
+            els.emptyHint.style.display = 'block';
+            return;
+        } else {
+            els.emptyHint.style.display = 'none';
+        }
+
         state.screenshots.forEach((item, index) => {
             const div = document.createElement('div');
             div.className = 'shot-item';
             div.draggable = true;
-            div.innerHTML = `<img src="${item.dataUrl}"><div class="shot-del">×</div>`;
-            div.onclick = () => { els.viewerImg.src = item.dataUrl; els.imageViewer.style.display = 'flex'; };
-            div.querySelector('.shot-del').onclick = (e) => { e.stopPropagation(); state.screenshots.splice(index, 1); renderShotList(); };
             
+            div.innerHTML = `
+                <div class="drag-handle" title="按住拖拽调整顺序">✥</div>
+                <div class="shot-del" title="删除">×</div>
+                <img src="${item.dataUrl}">
+            `;
+
+            // 点击查看大图 (兼容漫游：拖动幅度小视为点击)
+            div.onclick = (e) => { 
+                if (Math.abs(e.clientX - previewState.clickStartX) > 5 || Math.abs(e.clientY - previewState.clickStartY) > 5) return;
+                els.viewerImg.src = item.dataUrl; els.imageViewer.style.display = 'flex'; 
+            };
+            
+            div.querySelector('.shot-del').onclick = (e) => { 
+                e.stopPropagation(); state.screenshots.splice(index, 1); renderShotList(); 
+            };
+            
+            // 拖拽排序
             div.ondragstart = (e) => { e.dataTransfer.setData('idx', index); div.classList.add('dragging'); };
             div.ondragend = () => div.classList.remove('dragging');
             div.ondragover = (e) => e.preventDefault();
             div.ondrop = (e) => {
                 e.preventDefault();
                 const from = e.dataTransfer.getData('idx');
+                if(!from) return;
                 const moved = state.screenshots.splice(from, 1)[0];
                 state.screenshots.splice(index, 0, moved);
                 renderShotList();
             };
+            
             els.shotList.appendChild(div);
         });
-        if(state.screenshots.length === 0) els.shotList.innerHTML = '<div style="text-align:center; color:#999; padding:20px; grid-column:1/-1;">暂无截图</div>';
     }
 
+    // 智能聚焦最新截图
+    function focusOnLatestShot() {
+        setTimeout(() => {
+            const shotEls = els.shotList.querySelectorAll('.shot-item');
+            if(shotEls.length === 0) return;
+            const lastEl = shotEls[shotEls.length - 1];
+            const img = lastEl.querySelector('img');
+
+            if(!img.complete) {
+                img.onload = () => doFocus(lastEl);
+            } else {
+                doFocus(lastEl);
+            }
+        }, 50);
+    }
+
+    function doFocus(el) {
+        const rect = els.viewport.getBoundingClientRect();
+        const img = el.querySelector('img');
+        const elW = el.offsetWidth || img.naturalWidth || rect.width * 0.8; 
+        const elH = el.offsetHeight || img.naturalHeight || elW;
+
+        // 让图填满宽度的 80%
+        let targetScale = (rect.width * 0.8) / elW;
+        if (targetScale > 2) targetScale = 2; // 最大放大不超过 2 倍
+
+        const centerX = el.offsetLeft + elW / 2;
+        const centerY = el.offsetTop + elH / 2;
+
+        previewState.translateX = rect.width / 2 - centerX * targetScale;
+        previewState.translateY = rect.height / 2 - centerY * targetScale;
+        previewState.scale = targetScale;
+
+        els.shotList.style.transition = 'transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)';
+        updateTransform();
+        setTimeout(() => els.shotList.style.transition = 'none', 400);
+    }
+
+
+    // ======== 5. 保存与快捷键功能 ========
     els.imageViewer.onclick = () => els.imageViewer.style.display = 'none';
 
-    // --- 4. 保存功能 ---
     document.getElementById('downloadBtn').onclick = () => {
-        if (state.screenshots.length === 0) return;
+        if (state.screenshots.length === 0) return showToast("还没有截图可合并！");
         const images = state.screenshots.map(s => {
             const img = new Image();
             img.src = s.dataUrl;
@@ -366,14 +537,16 @@ document.addEventListener('DOMContentLoaded', () => {
             let y = 0;
             images.forEach(img => { ctx.drawImage(img, 0, y); y += img.height; });
             const link = document.createElement('a');
-            link.download = `拼接_${Date.now()}.jpg`;
+            link.download = `长图拼接_${Date.now()}.jpg`;
             link.href = canvas.toDataURL('image/jpeg', 0.9);
             link.click();
+            showToast("长图已保存！");
         });
     };
 
     document.getElementById('saveMultiBtn').onclick = downloadIndividual;
     function downloadIndividual() {
+        if (state.screenshots.length === 0) return;
         state.screenshots.forEach((s, i) => {
             setTimeout(() => {
                 const link = document.createElement('a');
@@ -382,9 +555,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 link.click();
             }, i * 300);
         });
+        showToast("已批量触发下载单图");
     }
 
-    // --- 5. 快捷键与控制 ---
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
         if (e.code === 'Space') { e.preventDefault(); capture(); }
@@ -409,7 +582,6 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         els.video.currentTime += (e.deltaY > 0 ? 0.5 : -0.5);
     };
-    document.querySelector('.progress-area').addEventListener('wheel', handleWheel, {passive:false});
     els.videoContainer.addEventListener('wheel', handleWheel, {passive:false});
 
     els.video.ontimeupdate = () => {
@@ -421,8 +593,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function formatTime(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
-    function showToast(m) { els.toast.innerText = m; els.toast.classList.add('show'); setTimeout(()=>els.toast.classList.remove('show'), 1500); }
-    document.getElementById('clearAllBtn').onclick = () => { if(confirm("清空？")) { state.screenshots=[]; renderShotList(); }};
+    function showToast(m) { els.toast.innerText = m; els.toast.classList.add('show'); setTimeout(()=>els.toast.classList.remove('show'), 2000); }
+    
+    document.getElementById('clearAllBtn').onclick = () => { 
+        if(confirm("确定清空所有已截图的画面吗？")) { 
+            state.screenshots=[]; 
+            renderShotList(); 
+            // 归位视口
+            previewState.translateX = 0; previewState.translateY = 0; previewState.scale = 1;
+            updateTransform();
+        }
+    };
+    
     els.fpsInput.onchange = (e) => state.fps = parseInt(e.target.value) || 30;
     window.addEventListener('resize', () => { updateVideoMetrics(); renderSelection(); });
 });
