@@ -424,7 +424,7 @@
                 <button data-mode="single" onclick="setMode('single')">单张微调</button>
                 <button data-mode="global" onclick="setMode('global')">智能全局</button>
             </div>
-            <div style="font-size: 11px; color:#667; margin-top: 6px;" id="selectedInfo">未选中图片</div>
+            <!-- 已删除显示文件名的元素 -->
         </div>
 
         <div class="control-group">
@@ -623,7 +623,7 @@
         if (currentMode !== 'global') return;
         globalSelectedSet.has(index) ? globalSelectedSet.delete(index) : globalSelectedSet.add(index);
         renderThumbnails();
-        queueRenderPreview(); // 刷新高亮手柄
+        queueRenderPreview();
     }
     
     function renderThumbnails() {
@@ -683,7 +683,7 @@
         selectedIndex = index;
         renderThumbnails();
         updateInputs(images[index].crop);
-        document.getElementById('selectedInfo').innerText = `编辑: ${images[index].name}`;
+        // 已删除显示文件名的代码
         queueRenderPreview();
     }
     
@@ -715,7 +715,7 @@
             }
             
             updateInputs(globalCrop);
-            document.getElementById('selectedInfo').innerHTML = `🌍 智能模式 | 全选 ${globalSelectedSet.size} 张`;
+            // 已删除显示全局选中数量的代码
             selectedIndex = -1;
             renderThumbnails();
             queueRenderPreview();
@@ -725,7 +725,7 @@
                 if(selectedIndex === -1) selectImage(0); 
                 else selectImage(selectedIndex);
             } else {
-                document.getElementById('selectedInfo').innerText = "请添加图片";
+                // 已删除显示提示的代码
                 selectedIndex = -1;
                 renderThumbnails();
             }
@@ -828,7 +828,7 @@
 
         updateInputs(globalCrop); 
         renderThumbnails(); updateEmptyOverlay();
-        document.getElementById('selectedInfo').innerText = "请添加图片";
+        // 已删除显示提示的代码
         currentMode === 'global' ? setMode('global') : setMode('single');
         showToast("已清空所有内容");
         
