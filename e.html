@@ -59,14 +59,53 @@
         .fps-wrapper { display: flex; align-items: center; gap: 5px; font-size: 13px; background: #eee; padding: 5px 10px; border-radius: 4px; }
         .fps-wrapper input { width: 40px; text-align: center; border: 1px solid #ccc; border-radius: 3px; }
 
-        /* 视频容器 */
+        /* 视频容器 - 支持无视频时的可点击区域 */
         .video-wrapper {
             flex: 1; background: #000; position: relative;
             display: flex; align-items: center; justify-content: center;
             overflow: hidden; border-radius: 4px; user-select: none;
+            cursor: pointer; /* 无视频时默认可点击，有视频时视频区本身仍然可点击（但视频框会捕获，不影响视频控制） */
         }
-        video { max-width: 100%; max-height: 100%; display: block; pointer-events: none; }
+        video { max-width: 100%; max-height: 100%; display: block; pointer-events: auto; } /* 视频本身需要事件处理选区等，但点击事件冒泡 */
         
+        /* 无视频时的加号覆盖层 */
+        .empty-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            color: white;
+            cursor: pointer;
+            z-index: 5;
+            transition: 0.2s;
+            border-radius: 4px;
+        }
+        .empty-video-overlay:hover {
+            background: rgba(0,0,0,0.75);
+        }
+        .empty-video-overlay .plus-icon {
+            font-size: 72px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .empty-video-overlay .plus-text {
+            font-size: 16px;
+            background: var(--primary);
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
         /* 选区框 */
         .overlay-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         .selection-box {
@@ -157,16 +196,16 @@
         <div class="top-controls">
             <div class="square-btns">
                 <button class="square-btn btn-success" id="captureBtn" title="快捷键: 鼠标右键 / 空格">
-                    <span class="icon">📸</span><span class="text">截图</span>
+                    <span class="icon">📸</span><span class="text">右键截图</span>
                 </button>
                 <button class="square-btn btn-primary" id="downloadBtn" title="快捷键: 回车键">
-                    <span class="icon">💾</span><span class="text">长图</span>
+                    <span class="icon">💾</span><span class="text">保存长图</span>
                 </button>
                 <button class="square-btn btn-orange" id="saveMultiBtn" title="快捷键: Ctrl + 回车键">
-                    <span class="icon">📦</span><span class="text">单图</span>
+                    <span class="icon">📦</span><span class="text">批量单图</span>
                 </button>
                 <button class="square-btn" onclick="resetToFull()" title="将选区恢复为视频全画面">
-                    <span class="icon">🔲</span><span class="text">铺满</span>
+                    <span class="icon">🔲</span><span class="text">选框铺满</span>
                 </button>
             </div>
             
@@ -180,6 +219,11 @@
 
         <div class="video-wrapper" id="videoContainer">
             <video id="videoPlayer"></video>
+            <!-- 无视频时的加号区域, 点击即可触发文件选择 -->
+            <div id="emptyVideoOverlay" class="empty-video-overlay" style="display: flex;">
+                <div class="plus-icon">➕</div>
+                <div class="plus-text">点击选择视频文件</div>
+            </div>
             <div class="overlay-layer">
                 <div class="selection-box" id="selectionBox" style="display:none;">
                     <div class="handle h-nw" data-dir="nw"></div><div class="handle h-n"  data-dir="n"></div>
@@ -237,7 +281,8 @@ document.addEventListener('DOMContentLoaded', () => {
         screenshots: [],
         videoMetrics: { displayW: 0, displayH: 0, offsetX: 0, offsetY: 0 },
         isDragging: false, dragAction: null,
-        dragStart: { x: 0, y: 0 }, rectStart: { x: 0, y: 0, w: 0, h: 0 }
+        dragStart: { x: 0, y: 0 }, rectStart: { x: 0, y: 0, w: 0, h: 0 },
+        isVideoLoaded: false
     };
 
     // 预览画布状态
@@ -260,8 +305,38 @@ document.addEventListener('DOMContentLoaded', () => {
         viewerImg: document.getElementById('viewerImg'),
         toast: document.getElementById('toast'),
         viewport: document.getElementById('previewViewport'),
-        emptyHint: document.getElementById('emptyHint')
+        emptyHint: document.getElementById('emptyHint'),
+        emptyOverlay: document.getElementById('emptyVideoOverlay'),
+        progressBar: document.getElementById('progressBar')
     };
+
+    // 显示/隐藏加号覆盖层 (根据视频是否加载)
+    function updateEmptyOverlay() {
+        if (!state.isVideoLoaded || !els.video.src || els.video.readyState === 0) {
+            els.emptyOverlay.style.display = 'flex';
+            // 确保容器可点击触发文件选择
+            els.videoContainer.style.cursor = 'pointer';
+        } else {
+            els.emptyOverlay.style.display = 'none';
+            els.videoContainer.style.cursor = 'default';
+        }
+    }
+
+    // 整个视频容器点击触发文件选择 (只在未加载时生效)
+    els.videoContainer.addEventListener('click', (e) => {
+        // 防止点击到内部按钮或者选区框导致意外触发文件选择，仅当没有视频资源且点击目标不是video本身自带的控制条区域即可
+        if (!state.isVideoLoaded && !els.video.src) {
+            els.fileInput.click();
+            e.stopPropagation();
+        }
+    });
+    // 加号覆盖层的点击直接调用fileInput
+    if (els.emptyOverlay) {
+        els.emptyOverlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            els.fileInput.click();
+        });
+    }
 
     // ======== 1. 视频加载与自适应逻辑 ========
     els.fileInput.addEventListener('change', (e) => {
@@ -271,10 +346,19 @@ document.addEventListener('DOMContentLoaded', () => {
         state.videoUrl = URL.createObjectURL(file);
         els.video.src = state.videoUrl;
         els.video.onloadedmetadata = () => {
+            state.isVideoLoaded = true;
             updateVideoMetrics();
             resetToFull(); 
             showToast("视频已加载");
             document.getElementById('statusText').innerText = file.name;
+            updateEmptyOverlay();
+            // 重设预览时间显示
+            els.video.currentTime = 0;
+        };
+        els.video.onerror = () => {
+            showToast("视频加载失败");
+            state.isVideoLoaded = false;
+            updateEmptyOverlay();
         };
     });
 
@@ -298,11 +382,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.resetToFull = () => {
+        if (!state.isVideoLoaded && !els.video.src) return;
         state.rect = { x: 0, y: 0, w: state.videoMetrics.displayW, h: state.videoMetrics.displayH };
         renderSelection();
     };
 
     function renderSelection() {
+        if (!state.isVideoLoaded) {
+            els.selBox.style.display = 'none';
+            return;
+        }
         els.selBox.style.display = 'block';
         els.selBox.style.left = `${state.videoMetrics.offsetX + state.rect.x}px`;
         els.selBox.style.top = `${state.videoMetrics.offsetY + state.rect.y}px`;
@@ -312,6 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ======== 2. 选区拖拽调整逻辑 ========
     els.selBox.addEventListener('mousedown', (e) => {
+        if (!state.isVideoLoaded) return;
         e.stopPropagation();
         state.isDragging = true;
         state.dragStart = { x: e.clientX, y: e.clientY };
@@ -367,11 +457,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // ======== 3. 截图核心与自动居中逻辑 ========
-    window.addEventListener('contextmenu', (e) => { e.preventDefault(); capture(); });
-    document.getElementById('captureBtn').onclick = capture;
+    window.addEventListener('contextmenu', (e) => { e.preventDefault(); if(state.isVideoLoaded && els.video.src) capture(); });
+    document.getElementById('captureBtn').onclick = () => { if(state.isVideoLoaded && els.video.src) capture(); };
 
     function capture() {
-        if (!els.video.src) return showToast("请先加载视频");
+        if (!els.video.src || !state.isVideoLoaded) return showToast("请先加载视频");
         const canvas = document.createElement('canvas');
         const scaleX = els.video.videoWidth / state.videoMetrics.displayW;
         const scaleY = els.video.videoHeight / state.videoMetrics.displayH;
@@ -416,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 平移
     els.viewport.addEventListener('mousedown', (e) => {
         if(e.target.closest('.drag-handle') || e.target.closest('.shot-del')) return;
-        e.preventDefault(); // 防止误触发图片原生拖拽
+        e.preventDefault(); 
         if (state.screenshots.length === 0) return;
 
         previewState.isPanning = true;
@@ -430,7 +520,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderShotList() {
         document.getElementById('shotCount').innerText = `已截图: ${state.screenshots.length} 张`;
         
-        Array.from(els.shotList.children).forEach(child => {
+        // 保留emptyHint元素
+        const children = Array.from(els.shotList.children);
+        children.forEach(child => {
             if (child.id !== 'emptyHint') els.shotList.removeChild(child);
         });
 
@@ -501,9 +593,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const elW = el.offsetWidth || img.naturalWidth || rect.width * 0.8; 
         const elH = el.offsetHeight || img.naturalHeight || elW;
 
-        // 让图填满宽度的 80%
         let targetScale = (rect.width * 0.8) / elW;
-        if (targetScale > 2) targetScale = 2; // 最大放大不超过 2 倍
+        if (targetScale > 2) targetScale = 2;
 
         const centerX = el.offsetLeft + elW / 2;
         const centerY = el.offsetTop + elH / 2;
@@ -518,7 +609,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // ======== 5. 保存与快捷键功能 ========
+    // ======== 5. 保存与快捷键功能 + 进度条点击跳转 ========
+    // 进度条点击跳转 (新增)
+    els.progressBar.addEventListener('click', (e) => {
+        if (!els.video.duration || !state.isVideoLoaded) return;
+        const rect = els.progressBar.getBoundingClientRect();
+        const percent = (e.clientX - rect.left) / rect.width;
+        const newTime = percent * els.video.duration;
+        els.video.currentTime = Math.min(Math.max(0, newTime), els.video.duration);
+        showToast(`跳转至 ${formatTime(newTime)}`);
+    });
+
     els.imageViewer.onclick = () => els.imageViewer.style.display = 'none';
 
     document.getElementById('downloadBtn').onclick = () => {
@@ -560,17 +661,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
-        if (e.code === 'Space') { e.preventDefault(); capture(); }
+        if (e.code === 'Space') { e.preventDefault(); if(state.isVideoLoaded && els.video.src) capture(); }
         if (e.code === 'Enter') {
             e.preventDefault();
             if (e.ctrlKey) downloadIndividual(); else document.getElementById('downloadBtn').click();
         }
-        if (e.code === 'ArrowLeft') seekCustom(-1);
-        if (e.code === 'ArrowRight') seekCustom(1);
+        if (e.code === 'ArrowLeft') { e.preventDefault(); seekCustom(-1); }
+        if (e.code === 'ArrowRight') { e.preventDefault(); seekCustom(1); }
         if (e.code === 'Escape') els.imageViewer.style.display = 'none';
     });
 
-    window.seekFrame = (f) => { els.video.currentTime += f * (1 / state.fps); };
+    window.seekFrame = (f) => { if(els.video.duration) els.video.currentTime += f * (1 / state.fps); };
     window.seekCustom = (d) => { 
         const step = parseInt(els.customStepInput.value) || 15;
         seekFrame(step * d); 
@@ -578,7 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleWheel = (e) => {
-        if (!els.video.duration) return;
+        if (!els.video.duration || !state.isVideoLoaded) return;
         e.preventDefault();
         els.video.currentTime += (e.deltaY > 0 ? 0.5 : -0.5);
     };
@@ -599,14 +700,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if(confirm("确定清空所有已截图的画面吗？")) { 
             state.screenshots=[]; 
             renderShotList(); 
-            // 归位视口
             previewState.translateX = 0; previewState.translateY = 0; previewState.scale = 1;
             updateTransform();
         }
     };
     
     els.fpsInput.onchange = (e) => state.fps = parseInt(e.target.value) || 30;
-    window.addEventListener('resize', () => { updateVideoMetrics(); renderSelection(); });
+    window.addEventListener('resize', () => { updateVideoMetrics(); if(state.isVideoLoaded) renderSelection(); });
+
+    // 初始时加号显示，没有视频，状态重置
+    state.isVideoLoaded = false;
+    updateEmptyOverlay();
+    renderShotList();
 });
 </script>
 </body>
